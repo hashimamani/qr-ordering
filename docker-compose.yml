@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qr_ordering
+      POSTGRES_PASSWORD: qr_ordering
+      POSTGRES_DB: qr_ordering
+    ports:
+      - "5434:5432"
+    volumes:
+      - qr_ordering_pgdata:/var/lib/postgresql/data
+
+volumes:
+  qr_ordering_pgdata:
