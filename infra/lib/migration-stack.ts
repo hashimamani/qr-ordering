@@ -17,20 +17,26 @@ export interface MigrationStackProps extends StackProps {
 }
 
 /**
- * A Lambda invoked by hand (or by the deploy workflow's `aws lambda
- * invoke` step) to run pending migrations -- RDS sits in a private
- * subnet with no bastion host, so this is how CI/CD (and anyone else)
- * reaches it without standing up a tunnel just for migrations. Not
- * triggered automatically by any event; the deploy workflow calls it
- * explicitly, after `cdk deploy` and before the new API code is expected
- * to see live traffic.
+ * Two Lambdas invoked by hand (`aws lambda invoke`), never by any
+ * automatic trigger -- RDS sits in a private subnet with no bastion host,
+ * so this is the only way to run pending migrations or load demo data
+ * into the deployed database at all. The deploy workflow calls the
+ * migration one explicitly, after `cdk deploy` and before the new API
+ * code is expected to see live traffic; the seed one is a manual,
+ * one-off "give me a demo restaurant to test against" call.
  */
 export class MigrationStack extends Stack {
   constructor(scope: Construct, id: string, props: MigrationStackProps) {
     super(scope, id, props);
 
-    const fn = new nodejs.NodejsFunction(this, 'MigrationFunction', {
-      entry: path.join(__dirname, '../../src/lambda-migrate.ts'),
+    const commonEnv = {
+      DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
+      APP_SECRET_ARN: props.appSecret.secretArn,
+      DB_HOST: props.dbInstance.instanceEndpoint.hostname,
+      DB_PORT: props.dbInstance.instanceEndpoint.port.toString(),
+      DB_NAME: props.dbName,
+    };
+    const commonProps = {
       projectRoot: path.join(__dirname, '../..'),
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
@@ -41,13 +47,12 @@ export class MigrationStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
       logRetention: logs.RetentionDays.ONE_MONTH,
-      environment: {
-        DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
-        APP_SECRET_ARN: props.appSecret.secretArn,
-        DB_HOST: props.dbInstance.instanceEndpoint.hostname,
-        DB_PORT: props.dbInstance.instanceEndpoint.port.toString(),
-        DB_NAME: props.dbName,
-      },
+    };
+
+    const migrateFn = new nodejs.NodejsFunction(this, 'MigrationFunction', {
+      ...commonProps,
+      entry: path.join(__dirname, '../../src/lambda-migrate.ts'),
+      environment: commonEnv,
       bundling: {
         // node-pg-migrate loads migration files from disk by directory
         // glob at runtime (not a static import esbuild would follow), so
@@ -64,9 +69,18 @@ export class MigrationStack extends Stack {
       },
     });
 
-    props.dbInstance.secret!.grantRead(fn);
-    props.appSecret.grantRead(fn);
+    const seedFn = new nodejs.NodejsFunction(this, 'SeedFunction', {
+      ...commonProps,
+      entry: path.join(__dirname, '../../src/lambda-seed.ts'),
+      environment: commonEnv,
+    });
 
-    new CfnOutput(this, 'MigrationFunctionName', { value: fn.functionName });
+    props.dbInstance.secret!.grantRead(migrateFn);
+    props.appSecret.grantRead(migrateFn);
+    props.dbInstance.secret!.grantRead(seedFn);
+    props.appSecret.grantRead(seedFn);
+
+    new CfnOutput(this, 'MigrationFunctionName', { value: migrateFn.functionName });
+    new CfnOutput(this, 'SeedFunctionName', { value: seedFn.functionName });
   }
 }

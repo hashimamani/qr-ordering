@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Order</title>
+<link rel="stylesheet" href="/app/styles.css" />
+</head>
+<body>
+<header>
+  <h1 id="restaurant-name">Loading…</h1>
+  <div class="sub" id="table-status"></div>
+</header>
+<main>
+  <div id="error" class="error-banner" style="display:none"></div>
+  <div id="menu"></div>
+
+  <div class="card" id="checkout" style="display:none">
+    <label for="channel">Get your tracking link by</label>
+    <select id="channel">
+      <option value="sms">SMS</option>
+      <option value="email">Email</option>
+    </select>
+    <label for="contact">Phone number (+2547XXXXXXXX) or email</label>
+    <input id="contact" placeholder="+254712345678" />
+    <button class="primary" id="submit-btn" disabled>Place order</button>
+  </div>
+</main>
+<script src="/app/api.js"></script>
+<script src="/app/order.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Waiter</title>
+<link rel="stylesheet" href="/app/styles.css" />
+</head>
+<body>
+<header>
+  <div class="top-bar">
+    <h1>Waiter</h1>
+    <button class="secondary" id="logout-btn">Log out</button>
+  </div>
+  <div class="sub">
+    <span class="conn-dot" id="conn-dot"></span><span id="conn-text">connecting…</span>
+    &middot; <span id="staff-name"></span>
+  </div>
+</header>
+<main>
+  <div id="error" class="error-banner" style="display:none"></div>
+  <div id="sessions"></div>
+</main>
+<script src="/app/api.js"></script>
+<script src="/app/staff/waiter.js"></script>
+</body>
+</html>

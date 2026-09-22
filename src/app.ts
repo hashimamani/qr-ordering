@@ -1,3 +1,4 @@
+import path from 'path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import pinoHttp from 'pino-http';
 import { ZodError } from 'zod';
@@ -18,6 +19,22 @@ export function buildApp() {
   const app = express();
   app.use(express.json());
   app.use(pinoHttp({ logger }));
+
+  // Minimal hand-written pages for exercising the API end-to-end in a
+  // browser (customer order flow, staff dashboards) -- calls the same
+  // JSON API below via fetch/WebSocket, same origin so no CORS setup is
+  // needed. Not the production PWA (see README) -- just enough to click
+  // through and watch an order move from submission to the kitchen
+  // dashboard to "ready".
+  //
+  // Path differs by environment: locally this file runs from src/, so
+  // public/ is one level up. Bundled into the Lambda (esbuild output is a
+  // single file with no src/ nesting), infra/lib/api-stack.ts's bundling
+  // hook copies public/ to sit right next to the bundle instead.
+  const publicDir = process.env.AWS_LAMBDA_FUNCTION_NAME
+    ? path.join(__dirname, 'public')
+    : path.join(__dirname, '..', 'public');
+  app.use('/app', express.static(publicDir));
 
   app.use(customerRoutes);
   app.use(staffRoutes);

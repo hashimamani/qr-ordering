@@ -4,7 +4,22 @@ import { pool } from './pool';
 import { generateToken } from '../lib/token';
 import { hashPassword } from '../lib/password';
 
-async function seed(): Promise<void> {
+export interface SeedResult {
+  restaurantSlug: string;
+  tables: { table_number: string; qr_token: string }[];
+  staffPassword: string;
+  staff: { role: string; contact: string }[];
+}
+
+/**
+ * Idempotent: re-running only fills in what's missing (ON CONFLICT DO
+ * NOTHING for tables/staff, a guard on existing categories for the
+ * menu) -- safe to invoke against an already-seeded database, which is
+ * exactly what happens when this runs both locally (npm run seed) and via
+ * lambda-seed.ts against the deployed RDS instance, which has no other
+ * way to reach it (private subnet, no bastion host).
+ */
+export async function seedDatabase(): Promise<SeedResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -88,24 +103,44 @@ async function seed(): Promise<void> {
       [finalRestaurantId],
     );
 
-    console.log('Seeded restaurant: amani-grill');
-    for (const t of tables.rows) {
-      console.log(`  Table ${t.table_number}: GET /r/amani-grill/t/${t.qr_token}`);
-    }
-    console.log(`Demo staff logins (restaurant_slug: amani-grill, password: ${demoPassword}):`);
-    for (const staff of demoStaff) {
-      console.log(`  ${staff.role}: ${staff.contact}`);
-    }
+    return {
+      restaurantSlug: 'amani-grill',
+      tables: tables.rows,
+      staffPassword: demoPassword,
+      staff: demoStaff.map((s) => ({ role: s.role, contact: s.contact })),
+    };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
-seed().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+function printResult(result: SeedResult): void {
+  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3010';
+
+  console.log(`Seeded restaurant: ${result.restaurantSlug}\n`);
+  console.log('Order as a customer:');
+  for (const t of result.tables) {
+    console.log(`  Table ${t.table_number}: ${base}/app/order.html?slug=${result.restaurantSlug}&t=${t.qr_token}`);
+  }
+  console.log(`\nStaff login (${base}/app/staff/login.html), password "${result.staffPassword}" for all:`);
+  for (const staff of result.staff) {
+    console.log(`  ${staff.role}: ${staff.contact}`);
+  }
+}
+
+// Only runs when executed directly (`npm run seed`), not when imported by
+// lambda-seed.ts.
+if (require.main === module) {
+  seedDatabase()
+    .then((result) => {
+      printResult(result);
+      return pool.end();
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

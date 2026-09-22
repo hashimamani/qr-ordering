@@ -13,7 +13,11 @@ const app = new App();
 
 const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
-  region: process.env.CDK_DEFAULT_REGION ?? 'eu-west-1', // Africa's Talking latency: pick the AWS region closest to Kenya you're allowed to deploy in
+  // Fixed, not read from CDK_DEFAULT_REGION -- eu-west-1 was a deliberate
+  // choice (latency to Kenya/Africa's Talking) over the account's default
+  // profile region (us-east-1, used by other projects on this account),
+  // so it shouldn't silently follow whatever profile happens to be active.
+  region: 'eu-west-1',
 };
 
 // Every stack that carries a URL an app config needs to know ahead of

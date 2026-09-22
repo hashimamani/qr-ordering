@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bar</title>
+<link rel="stylesheet" href="/app/styles.css" />
+</head>
+<body>
+<header>
+  <div class="top-bar">
+    <h1>Bar</h1>
+    <button class="secondary" id="logout-btn">Log out</button>
+  </div>
+  <div class="sub">
+    <span class="conn-dot" id="conn-dot"></span><span id="conn-text">connecting…</span>
+    &middot; <span id="staff-name"></span>
+  </div>
+</header>
+<main>
+  <div id="error" class="error-banner" style="display:none"></div>
+  <div id="items"></div>
+</main>
+<script src="/app/api.js"></script>
+<script>window.DESTINATION = 'bar';</script>
+<script src="/app/staff/dashboard.js"></script>
+</body>
+</html>

@@ -57,6 +57,17 @@ export class ApiStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
       logRetention: logs.RetentionDays.TWO_WEEKS,
+      bundling: {
+        // src/app.ts serves public/ as static files -- esbuild only
+        // follows static imports, so the non-imported public/ directory
+        // has to be copied into the bundle by hand (same pattern as
+        // MigrationStack's migrations/ copy).
+        commandHooks: {
+          beforeBundling: () => [],
+          afterBundling: (inputDir: string, outputDir: string) => [`cp -r ${inputDir}/public ${outputDir}/public`],
+          beforeInstall: () => [],
+        },
+      },
       environment: {
         DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
         APP_SECRET_ARN: props.appSecret.secretArn,

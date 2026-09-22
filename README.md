@@ -84,26 +84,36 @@ for real" before running `cdk deploy`.
 
 ## Two infra decisions worth understanding, not just accepting
 
-**Why there's a NAT Gateway (~$32-38/month, the one non-pay-per-use line
+**Why there's a NAT instance (~$3-4/month, the one non-pay-per-use line
 item in this whole architecture).** RDS Postgres only knows how to live on
 a private network address inside a VPC. The notification-worker Lambda
 needs both private RDS access *and* to call Africa's Talking's public API
 (no AWS VPC endpoint exists for third-party SaaS) — that combination is
-what forces a NAT Gateway to exist at all; it isn't there for RDS access
-itself, which is free within the VPC. The alternative (take that one
-Lambda out of the VPC, give RDS a public endpoint instead) was considered
-and rejected: `publicly_accessible` is all-or-nothing on the RDS resource,
-so "just for one Lambda" isn't actually possible — it would mean the
-production database, not just one function, becomes reachable from the
-public internet, and Lambda's lack of a fixed outbound IP means no
-security-group rule could narrow that back down to "just this caller."
-Switching the whole data layer to DynamoDB (which needs no VPC at all, the
-same reason a sibling project's Lambdas never needed one) was also
-considered and explicitly declined, to keep the relational joins and
-transactions the dashboards and billing-adjacent order data lean on. A
-cheaper self-managed NAT instance (~$3-4/month, no AWS-managed
-reliability) was the other option on the table; the managed Gateway was
-chosen for simplicity.
+what forces something to exist at all for internet egress; it isn't
+needed for RDS access itself, which is free within the VPC. The
+alternative (take that one Lambda out of the VPC, give RDS a public
+endpoint instead) was considered and rejected: `publicly_accessible` is
+all-or-nothing on the RDS resource, so "just for one Lambda" isn't
+actually possible — it would mean the production database, not just one
+function, becomes reachable from the public internet, and Lambda's lack
+of a fixed outbound IP means no security-group rule could narrow that
+back down to "just this caller." Switching the whole data layer to
+DynamoDB (which needs no VPC at all, the same reason a sibling project's
+Lambdas never needed one) was also considered and explicitly declined, to
+keep the relational joins and transactions the dashboards and
+billing-adjacent order data lean on.
+
+The remaining choice was managed NAT Gateway (~$32-38/month, AWS-managed,
+no server to patch) vs. a self-managed NAT instance (~$3-4/month, one
+EC2 box you own patching, no AWS-managed failover). This deployment
+actually stood the managed Gateway up first, then swapped it for the NAT
+instance (`ec2.NatProvider.instanceV2` in `network-stack.ts`, a `t4g.nano`)
+once the monthly cost was reconsidered — a live illustration of the
+trade-off, not just a paragraph about it. The real risk this carries: if
+that one instance goes down, every VPC-attached Lambda loses internet
+egress (RDS access is unaffected, it's intra-VPC) until it's manually
+recovered. Fine for a pre-revenue demo; revisit the managed Gateway once
+a paying restaurant's reliability needs justify the extra ~$30/month.
 
 **Why WebSocket connections are tracked in DynamoDB, not Postgres.** API
 Gateway WebSocket Lambdas are stateless, so broadcasting to "everyone
@@ -182,9 +192,10 @@ After deploying:
 once an `AWS_DEPLOY_ROLE_ARN` repository secret exists (an IAM role the
 workflow assumes via OIDC, no long-lived keys) — until then it fails
 immediately at the credentials step and touches nothing. Read the NAT
-Gateway cost note above before configuring that secret: creating
-`QrOrderingNetwork` starts a ~$32-38/month charge that runs continuously
-until the stack is destroyed, independent of order volume.
+cost note above before configuring that secret: creating
+`QrOrderingNetwork` starts a small (~$3-4/month) but continuous charge
+for the NAT instance, independent of order volume, until the stack is
+destroyed.
 
 ## Load testing (step 9)
 
@@ -233,7 +244,7 @@ calling v1 load-tested, per the original build order's own framing.
 - `npx vitest run` — 7 passing tests; `npx tsc --noEmit` — clean under
   `strict`, both in the app and in `infra/`
 - `cd infra && npx cdk synth` — all 8 stacks synthesize with no errors;
-  exactly 1 NAT Gateway, RDS confirmed `PubliclyAccessible: false`
+  zero NAT Gateways, one NAT instance, RDS confirmed `PubliclyAccessible: false`
 
 ## Known gaps to close before this counts as "production"
 
