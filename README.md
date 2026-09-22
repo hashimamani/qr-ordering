@@ -178,7 +178,7 @@ After deploying:
 3. Set `PUBLIC_BASE_URL`/`PUBLIC_ORDERING_BASE_URL` to your real domain
    and redeploy — they default to a placeholder.
 
-`.github/workflows/deploy.yml` automates this on merge to `main`, but only
+`.github/workflows/deploy.yml` automates this on merge to `master`, but only
 once an `AWS_DEPLOY_ROLE_ARN` repository secret exists (an IAM role the
 workflow assumes via OIDC, no long-lived keys) — until then it fails
 immediately at the credentials step and touches nothing. Read the NAT
