@@ -2,15 +2,17 @@ import { findRestaurantBySlug, findTableByQrToken, findOrCreateActiveSession } f
 import { findMenuItemsByIds } from '../menu/menu.repository';
 import { insertOrder, type CreateOrderItemInput } from './orders.repository';
 import { generateToken } from '../../lib/token';
+import { trackingUrlFor } from '../../lib/urls';
 import { ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, type CreateOrderInput } from './orders.validation';
+import { getNotificationQueue } from '../notifications/notifications.queue';
+import { broadcast } from '../../realtime/socketServer';
+import { logger } from '../../lib/logger';
 
 export interface PlaceOrderResult {
   public_token: string;
   tracking_url: string;
 }
-
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
 export async function placeOrder(
   restaurantSlug: string,
@@ -54,12 +56,38 @@ export async function placeOrder(
     items: orderItems,
   });
 
-  // Notification dispatch (SQS -> SMS/email) is wired in a later phase; the
-  // order must succeed regardless of notification delivery, so it is
-  // intentionally not on this synchronous path yet.
+  const trackingUrl = trackingUrlFor(order.public_token);
+
+  // Enqueue must never block or fail order submission -- the order has
+  // already been committed at this point regardless of what happens here.
+  try {
+    await getNotificationQueue().enqueue({
+      orderId: order.id,
+      channel: input.contact_channel,
+      contactValue: input.contact_value,
+      trigger: 'order_received',
+      templateData: { restaurantName: restaurant.name, trackingUrl },
+    });
+  } catch (err) {
+    logger.error({ err, orderId: order.id }, 'failed to enqueue order_received notification');
+  }
+
+  const destinationsInOrder = new Set(orderItems.map((item) => item.destination));
+  for (const destination of destinationsInOrder) {
+    broadcast(`restaurant:${restaurant.id}:${destination}`, {
+      type: 'new_order',
+      table_number: table.table_number,
+      order_public_token: order.public_token,
+    });
+  }
+  broadcast(`restaurant:${restaurant.id}:waiter`, {
+    type: 'order_placed',
+    table_number: table.table_number,
+    order_public_token: order.public_token,
+  });
 
   return {
     public_token: order.public_token,
-    tracking_url: `${PUBLIC_BASE_URL}/track/${order.public_token}`,
+    tracking_url: trackingUrl,
   };
 }

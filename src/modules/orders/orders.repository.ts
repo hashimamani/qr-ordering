@@ -1,5 +1,5 @@
 import { PoolClient } from 'pg';
-import { pool } from '../../db/pool';
+import { pool, query } from '../../db/pool';
 
 export interface CreateOrderItemInput {
   menu_item_id: string;
@@ -58,4 +58,28 @@ export async function insertOrder(input: CreateOrderInput): Promise<CreatedOrder
   } finally {
     client.release();
   }
+}
+
+export interface OrderNotificationContext {
+  contact_channel: 'sms' | 'email';
+  contact_value: string;
+  restaurant_name: string;
+  public_token: string;
+}
+
+/**
+ * Fetches exactly what the notification pipeline needs for one order —
+ * used both right after order creation and from the order_ready trigger,
+ * so the queue payload never has to carry contact_value itself beyond
+ * what's needed to place the send.
+ */
+export async function findOrderNotificationContext(orderId: string): Promise<OrderNotificationContext | undefined> {
+  const result = await query<OrderNotificationContext>(
+    `SELECT o.contact_channel, o.contact_value, r.name AS restaurant_name, o.public_token
+     FROM "order" o
+     JOIN restaurant r ON r.id = o.restaurant_id
+     WHERE o.id = $1`,
+    [orderId],
+  );
+  return result.rows[0];
 }

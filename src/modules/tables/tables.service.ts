@@ -1,5 +1,13 @@
-import { findRestaurantBySlug, findTableByQrToken, findOrCreateActiveSession } from './tables.repository';
+import {
+  findRestaurantBySlug,
+  findTableByQrToken,
+  findOrCreateActiveSession,
+  listActiveTableSessionsForRestaurant,
+  closeTableSession,
+  type WaiterTableSession,
+} from './tables.repository';
 import { listMenuForRestaurant } from '../menu/menu.repository';
+import { broadcast } from '../../realtime/socketServer';
 
 export interface ResolveTableResult {
   restaurant: { name: string; slug: string };
@@ -31,4 +39,16 @@ export async function resolveTableForOrdering(
     table_session_status: session.status,
     menu,
   };
+}
+
+export async function getWaiterView(restaurantId: string): Promise<WaiterTableSession[]> {
+  return listActiveTableSessionsForRestaurant(restaurantId);
+}
+
+export async function closeSession(restaurantId: string, sessionId: string): Promise<void> {
+  await closeTableSession(restaurantId, sessionId);
+  broadcast(`restaurant:${restaurantId}:waiter`, {
+    type: 'session_closed',
+    table_session_id: sessionId,
+  });
 }

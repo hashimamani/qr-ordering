@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { randomUUID } from 'crypto';
 import { pool } from './pool';
 import { generateToken } from '../lib/token';
+import { hashPassword } from '../lib/password';
 
 async function seed(): Promise<void> {
   const client = await pool.connect();
@@ -30,28 +31,55 @@ async function seed(): Promise<void> {
       [finalRestaurantId, table1Token, table2Token],
     );
 
-    const drinksCategory = await client.query<{ id: string }>(
-      `INSERT INTO menu_category (restaurant_id, name, sort_order)
-       VALUES ($1, 'Drinks', 1)
-       RETURNING id`,
-      [finalRestaurantId],
-    );
-    const mainsCategory = await client.query<{ id: string }>(
-      `INSERT INTO menu_category (restaurant_id, name, sort_order)
-       VALUES ($1, 'Mains', 2)
-       RETURNING id`,
+    // menu_category/menu_item have no natural unique key to ON CONFLICT
+    // on, so re-running the seed guards against duplicating the menu by
+    // checking whether this restaurant already has any categories.
+    const existingCategories = await client.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM menu_category WHERE restaurant_id = $1',
       [finalRestaurantId],
     );
 
-    await client.query(
-      `INSERT INTO menu_item (restaurant_id, category_id, name, description, price, destination)
-       VALUES
-         ($1, $2, 'Tusker Lager', 'Cold 500ml', 350.00, 'bar'),
-         ($1, $2, 'Fresh Passion Juice', 'Locally sourced', 250.00, 'bar'),
-         ($1, $3, 'Nyama Choma Plate', 'Grilled beef, kachumbari, ugali', 950.00, 'kitchen'),
-         ($1, $3, 'Grilled Tilapia', 'Whole fish, side of fries', 1100.00, 'kitchen')`,
-      [finalRestaurantId, drinksCategory.rows[0].id, mainsCategory.rows[0].id],
-    );
+    if (existingCategories.rows[0].count === '0') {
+      const drinksCategory = await client.query<{ id: string }>(
+        `INSERT INTO menu_category (restaurant_id, name, sort_order)
+         VALUES ($1, 'Drinks', 1)
+         RETURNING id`,
+        [finalRestaurantId],
+      );
+      const mainsCategory = await client.query<{ id: string }>(
+        `INSERT INTO menu_category (restaurant_id, name, sort_order)
+         VALUES ($1, 'Mains', 2)
+         RETURNING id`,
+        [finalRestaurantId],
+      );
+
+      await client.query(
+        `INSERT INTO menu_item (restaurant_id, category_id, name, description, price, destination)
+         VALUES
+           ($1, $2, 'Tusker Lager', 'Cold 500ml', 350.00, 'bar'),
+           ($1, $2, 'Fresh Passion Juice', 'Locally sourced', 250.00, 'bar'),
+           ($1, $3, 'Nyama Choma Plate', 'Grilled beef, kachumbari, ugali', 950.00, 'kitchen'),
+           ($1, $3, 'Grilled Tilapia', 'Whole fish, side of fries', 1100.00, 'kitchen')`,
+        [finalRestaurantId, drinksCategory.rows[0].id, mainsCategory.rows[0].id],
+      );
+    }
+
+    const demoPassword = 'password123';
+    const demoPasswordHash = await hashPassword(demoPassword);
+    const demoStaff: { name: string; role: 'admin' | 'waiter' | 'kitchen' | 'bar'; contact: string }[] = [
+      { name: 'Amani Admin', role: 'admin', contact: 'admin@amani-grill.test' },
+      { name: 'Wanjiru Waiter', role: 'waiter', contact: 'waiter@amani-grill.test' },
+      { name: 'Kamau Kitchen', role: 'kitchen', contact: 'kitchen@amani-grill.test' },
+      { name: 'Baraka Bar', role: 'bar', contact: 'bar@amani-grill.test' },
+    ];
+    for (const staff of demoStaff) {
+      await client.query(
+        `INSERT INTO staff_user (restaurant_id, name, role, phone_or_email, password_hash)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (restaurant_id, phone_or_email) DO NOTHING`,
+        [finalRestaurantId, staff.name, staff.role, staff.contact, demoPasswordHash],
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -63,6 +91,10 @@ async function seed(): Promise<void> {
     console.log('Seeded restaurant: amani-grill');
     for (const t of tables.rows) {
       console.log(`  Table ${t.table_number}: GET /r/amani-grill/t/${t.qr_token}`);
+    }
+    console.log(`Demo staff logins (restaurant_slug: amani-grill, password: ${demoPassword}):`);
+    for (const staff of demoStaff) {
+      console.log(`  ${staff.role}: ${staff.contact}`);
     }
   } catch (err) {
     await client.query('ROLLBACK');
