@@ -38,10 +38,17 @@ class AfricasTalkingSmsProvider implements NotificationProvider {
 
   async send(to: string, message: { body: string }): Promise<SendResult> {
     try {
+      // Confirmed live: passing from: '' (an unconfigured sender id,
+      // which arrives here as an empty string rather than undefined --
+      // see awsSecrets.ts's `?? ''`) makes the SDK's own request
+      // validation reject the call outright ("from" is not allowed to
+      // be empty) -- every real send failed this way until omitting the
+      // field entirely for the no-sender-id case, which the API accepts
+      // fine (it just uses Africa's Talking's default/shared shortcode).
       const result = await this.client.SMS.send({
         to,
         message: message.body,
-        from: this.senderId,
+        ...(this.senderId ? { from: this.senderId } : {}),
       });
       // Africa's Talking's numeric statusCode varies by outcome (100
       // Processed, 101 Sent, 102 Queued are all non-failures) -- the
