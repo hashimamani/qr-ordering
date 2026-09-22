@@ -4,14 +4,46 @@ Multi-tenant SaaS: restaurants put a QR code on each table, customers order
 from their phone with no login, staff run kitchen/bar/waiter dashboards.
 Payment is collected manually by the waiter — no in-app payment in v1.
 
-## Status: all 9 build steps done; infra written but never deployed
+## Status: all 9 build steps done, deployed live to AWS (eu-west-1)
 
-The application (steps 1–7) is fully built and verified locally end-to-end.
-AWS infrastructure as code and CI/CD (step 8) is written in CDK and
-`cdk synth` succeeds for all 8 stacks — but **nothing has been deployed**.
-Load testing (step 9) has been run against the local server; real
-AWS-hosted numbers still need a real deployment to measure. See "Deploying
-for real" before running `cdk deploy`.
+The application (steps 1–7) is fully built and verified both locally and
+against the live deployment. AWS infrastructure (step 8) is deployed for
+real — all 8 CDK stacks are up in `eu-west-1`, migrated, seeded, and
+verified end-to-end: a real order placed against the live API triggers a
+real SMS via Africa's Talking, shows up live on the staff dashboards over
+the deployed WebSocket API, and updates the customer's tracking page in
+real time. Load testing (step 9) has only been run against the local
+server so far — worth re-running against the live deployment before
+calling this properly load-tested.
+
+Two real bugs were only caught by actually deploying and testing live,
+not by local development or `cdk synth`:
+- RDS's default parameter group rejects unencrypted connections; the app
+  and `node-pg-migrate` both needed SSL configured (`src/db/pool.ts`,
+  `src/lib/awsSecrets.ts`) — local Docker Postgres has no SSL at all, so
+  this was invisible locally.
+- Africa's Talking's SMS API returns `statusCode: 100` ("Processed") for
+  a successful send, not `101` as the original code checked for — every
+  real send would have been logged as `failed` and retried needlessly
+  despite actually delivering. Fixed to check the `status: "Success"`
+  string field instead (`src/modules/notifications/notifications.providers.ts`).
+
+See "Deploying for real" for how to reproduce this deployment and what it
+actually took (including the NAT Gateway vs NAT instance saga).
+
+## Live deployment
+
+| | |
+|---|---|
+| API | `https://gmejeftua9.execute-api.eu-west-1.amazonaws.com` |
+| WebSocket | `wss://mlpy8jz5yb.execute-api.eu-west-1.amazonaws.com/prod` |
+| Region | `eu-west-1` |
+| Order (table 1) | `{API}/app/order.html?slug=amani-grill&t=<table 1's qr_token>` |
+| Staff login | `{API}/app/staff/login.html` (password `password123`) |
+
+Table `qr_token`s change every time the seed Lambda runs — query RDS or
+re-invoke the seed Lambda to get current ones rather than assuming the
+values are still live.
 
 ## Stack
 
@@ -84,7 +116,7 @@ for real" before running `cdk deploy`.
 
 ## Two infra decisions worth understanding, not just accepting
 
-**Why there's a NAT instance (~$3-4/month, the one non-pay-per-use line
+**Why there's a NAT Gateway (~$32-38/month, the one non-pay-per-use line
 item in this whole architecture).** RDS Postgres only knows how to live on
 a private network address inside a VPC. The notification-worker Lambda
 needs both private RDS access *and* to call Africa's Talking's public API
@@ -104,16 +136,24 @@ keep the relational joins and transactions the dashboards and
 billing-adjacent order data lean on.
 
 The remaining choice was managed NAT Gateway (~$32-38/month, AWS-managed,
-no server to patch) vs. a self-managed NAT instance (~$3-4/month, one
-EC2 box you own patching, no AWS-managed failover). This deployment
-actually stood the managed Gateway up first, then swapped it for the NAT
-instance (`ec2.NatProvider.instanceV2` in `network-stack.ts`, a `t4g.nano`)
-once the monthly cost was reconsidered — a live illustration of the
-trade-off, not just a paragraph about it. The real risk this carries: if
-that one instance goes down, every VPC-attached Lambda loses internet
-egress (RDS access is unaffected, it's intra-VPC) until it's manually
-recovered. Fine for a pre-revenue demo; revisit the managed Gateway once
-a paying restaurant's reliability needs justify the extra ~$30/month.
+no server to patch) vs. a self-managed NAT instance (~$3-4/month, one EC2
+box you own patching, no AWS-managed failover). **This deployment actually
+tried the NAT instance first** (`ec2.NatProvider.instanceV2`, a `t4g.nano`)
+to get the cheaper cost, and it was a real lesson in why "managed" is
+worth paying for: the library's default NAT setup script assumes an
+`iptables-services` package that doesn't exist on the Amazon Linux 2023
+AMI it resolves to, so the install silently failed and the instance ran
+fine while forwarding zero traffic. Three separate fixes and instance
+replacements later (confirmed via VPC Reachability Analyzer that
+routing/security groups were never the problem — something at the OS
+level inside the instance kept black-holing traffic, and it couldn't be
+reached via SSH or SSM to debug further), the pragmatic call was to
+revert to the managed Gateway and treat the NAT instance as a follow-up
+worth revisiting with SSM access wired up first, not something to keep
+blocking a working deployment on. The code for the NAT instance attempt
+is preserved in git history (see the "Frontend test harness, seed
+Lambda, NAT instance, eu-west-1" and later commits) if picking this back
+up later.
 
 **Why WebSocket connections are tracked in DynamoDB, not Postgres.** API
 Gateway WebSocket Lambdas are stateless, so broadcasting to "everyone
@@ -167,9 +207,10 @@ real provider.
 
 ## Deploying for real
 
-**Not done as part of this build — this needs your explicit go-ahead and
-your own AWS credentials.** `cdk synth` (no AWS credentials needed) has
-been run and succeeds; `cdk deploy` has not been run at all.
+**Currently deployed** to AWS account `304442552123`, region `eu-west-1`
+(chosen for latency to Kenya/Africa's Talking over the account's default
+`us-east-1`). All 8 stacks are up, migrated, and seeded with the same
+demo restaurant (`amani-grill`) the local seed script creates.
 
 ```bash
 cd infra
@@ -181,21 +222,41 @@ npx cdk deploy --all
 After deploying:
 1. Populate the two AT/SES + platform-admin-key fields CDK leaves as
    empty placeholders in the `AppSecret` (see its `CfnOutput` for the
-   ARN) — CDK creates secrets, it never invents real credential values.
-2. Invoke the migration Lambda once (see `QrOrderingMigration`'s
-   `CfnOutput` for its function name):
+   ARN) — CDK creates secrets, it never invents real credential values:
+   `aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"jwtSecret":"<keep the auto-generated one>","platformAdminKey":"...","africastalkingApiKey":"...","africastalkingUsername":"...","africastalkingSenderId":"","sesFromAddress":""}'`
+2. Invoke the migration Lambda once, then the seed Lambda (see
+   `QrOrderingMigration`'s `CfnOutput`s for both function names):
    `aws lambda invoke --function-name <name> --payload '{}' out.json`
-3. Set `PUBLIC_BASE_URL`/`PUBLIC_ORDERING_BASE_URL` to your real domain
-   and redeploy — they default to a placeholder.
+3. Set `PUBLIC_BASE_URL`/`PUBLIC_ORDERING_BASE_URL` to the real
+   `QrOrderingApi.HttpApiUrl` output and redeploy `QrOrderingApi` — they
+   default to a placeholder on first deploy, since the URL doesn't exist
+   until after that first deploy creates it.
+
+**Two things that only surfaced deploying for real, not from `cdk
+synth`:** RDS needs SSL (`?sslmode=no-verify` appended to `DATABASE_URL`
+in `awsSecrets.ts`, plus `ssl` config in `db/pool.ts`) — local Docker
+Postgres has none configured, so nothing local would have caught this.
+And the migration/seed Lambdas take a `Requested update requires the
+creation of a new physical resource` style replacement badly the first
+time you touch `NetworkStack` after they've already been granted access —
+not actually a problem in practice, just worth knowing `cdk deploy
+QrOrderingNetwork` alone is the right scope for network-only changes
+rather than `--all`.
 
 `.github/workflows/deploy.yml` automates this on merge to `master`, but only
 once an `AWS_DEPLOY_ROLE_ARN` repository secret exists (an IAM role the
 workflow assumes via OIDC, no long-lived keys) — until then it fails
 immediately at the credentials step and touches nothing. Read the NAT
-cost note above before configuring that secret: creating
-`QrOrderingNetwork` starts a small (~$3-4/month) but continuous charge
-for the NAT instance, independent of order volume, until the stack is
-destroyed.
+Gateway cost note above before configuring that secret: creating
+`QrOrderingNetwork` starts a ~$32-38/month charge that runs continuously,
+independent of order volume, until the stack is destroyed.
+
+**Tearing down between demos:** `cdk destroy --all` removes everything
+*except* the RDS instance and `AppSecret` — both are `RemovalPolicy.RETAIN`
+on purpose (never lose real order data to an accidental destroy). RDS
+free tier likely makes leaving it running between sessions genuinely
+free for the first 12 months; if you want a truly zero-cost teardown,
+delete those two by hand afterward (you'll need to re-seed next time).
 
 ## Load testing (step 9)
 
@@ -244,14 +305,32 @@ calling v1 load-tested, per the original build order's own framing.
 - `npx vitest run` — 7 passing tests; `npx tsc --noEmit` — clean under
   `strict`, both in the app and in `infra/`
 - `cd infra && npx cdk synth` — all 8 stacks synthesize with no errors;
-  zero NAT Gateways, one NAT instance, RDS confirmed `PubliclyAccessible: false`
+  one NAT Gateway, RDS confirmed `PubliclyAccessible: false`
+
+## Verified against the live AWS deployment
+
+- `GET /r/amani-grill/t/{qrToken}` on the real `HttpApiUrl` returns the
+  real seeded menu from RDS
+- A real order placed against the live API returned a `tracking_url`
+  pointing at the live domain, and the tracking endpoint reflects it
+- A real Africa's Talking SMS was sent and accepted (`status: "Success"`,
+  a real KES 0.80 charge) for both the `order_received` and
+  `order_ready` triggers, via the deployed notification-worker Lambda —
+  not a dry run
+- Live staff login → bar dashboard → status transitions
+  (`received → preparing → ready → served`) all worked against the
+  deployed API and RDS
+- A `ws` client connected to the deployed API Gateway WebSocket
+  (`wss://.../prod`), joined an `order:{token}` room, and received a
+  live `status_changed` push when a staff status update happened via the
+  REST API — confirms the DynamoDB-backed broadcast path
+  (`dynamoBroadcaster.ts`) works end-to-end, not just the local `ws` path
+- Generated a real QR code encoding the live ordering URL and confirmed
+  the `/app/*` frontend loads over the deployed Lambda (bundled via
+  `api-stack.ts`'s `afterBundling` hook, not served from local disk)
 
 ## Known gaps to close before this counts as "production"
 
-- **Nothing has been deployed to AWS.** `cdk synth` succeeding is not the
-  same as a working deployment — Secrets Manager values, IAM policy
-  edge cases, and cross-stack wiring are only really proven by a real
-  `cdk deploy`.
 - `npm audit` flags dev-only transitive vulnerabilities (vitest's
   `esbuild` dev server, `node-pg-migrate`'s `glob` CLI, `africastalking`'s
   `joi`) — none reachable at runtime, but revisit before this matters
@@ -285,5 +364,5 @@ calling v1 load-tested, per the original build order's own framing.
 5. ~~Staff auth + kitchen/bar/waiter dashboards~~ — done
 6. ~~Real-time layer~~ — done
 7. ~~Admin onboarding~~ — done
-8. ~~AWS infra as code, CI/CD~~ — written, `cdk synth` verified, never deployed
-9. ~~Load test order-submission and tracking~~ — done locally; re-run against staging before v1
+8. ~~AWS infra as code, CI/CD~~ — deployed live to eu-west-1, verified end-to-end with real SMS
+9. ~~Load test order-submission and tracking~~ — done locally; re-run against the live deployment next

@@ -48,7 +48,16 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         const host = process.env.DB_HOST;
         const port = process.env.DB_PORT;
         const dbName = process.env.DB_NAME;
-        process.env.DATABASE_URL = `postgres://${encodeURIComponent(db.username)}:${encodeURIComponent(db.password)}@${host}:${port}/${dbName}`;
+        // sslmode=no-verify: RDS's default parameter group rejects
+        // unencrypted connections outright ("no pg_hba.conf entry ...
+        // no encryption"), and node-pg-migrate builds its own pg Client
+        // straight from this URL (bypassing db/pool.ts's ssl option
+        // entirely), so SSL has to be encoded in the URL itself to cover
+        // both paths. no-verify (not just require) skips CA chain
+        // verification -- same trust tradeoff as pool.ts's
+        // rejectUnauthorized: false, for the same reason (private VPC
+        // only, never the public internet).
+        process.env.DATABASE_URL = `postgres://${encodeURIComponent(db.username)}:${encodeURIComponent(db.password)}@${host}:${port}/${dbName}?sslmode=no-verify`;
       }),
     );
   }

@@ -5,7 +5,18 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not set');
 }
 
-export const pool = new Pool({ connectionString });
+// RDS's default parameter group rejects unencrypted connections
+// ("no pg_hba.conf entry ... no encryption"); local Docker Postgres has
+// no SSL configured at all, so this only turns on in Lambda.
+// rejectUnauthorized: false trusts the connection is encrypted without
+// verifying RDS's certificate chain -- acceptable here since this only
+// ever runs inside the private VPC RDS itself lives in, never over the
+// public internet; verifying against RDS's CA bundle would be worth
+// doing properly before this handles real payment-adjacent traffic.
+export const pool = new Pool({
+  connectionString,
+  ssl: process.env.AWS_LAMBDA_FUNCTION_NAME ? { rejectUnauthorized: false } : undefined,
+});
 
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,

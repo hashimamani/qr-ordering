@@ -43,8 +43,14 @@ class AfricasTalkingSmsProvider implements NotificationProvider {
         message: message.body,
         from: this.senderId,
       });
+      // Africa's Talking's numeric statusCode varies by outcome (100
+      // Processed, 101 Sent, 102 Queued are all non-failures) -- the
+      // "Success" string status is the stable signal. Confirmed live:
+      // an initial version of this check only accepted 101 and would
+      // have silently mismarked a real, successfully-delivered send
+      // (statusCode 100) as failed.
       const recipient = result.SMSMessageData.Recipients[0];
-      const success = recipient?.statusCode === 101;
+      const success = recipient?.status === 'Success';
       return { success, providerResponse: JSON.stringify(result.SMSMessageData) };
     } catch (err) {
       return { success: false, providerResponse: err instanceof Error ? err.message : 'unknown error' };
