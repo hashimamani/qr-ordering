@@ -1,12 +1,7 @@
 import type { Server as HttpServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { verifyStaffToken } from '../lib/jwt';
 import { logger } from '../lib/logger';
-
-type Destination = 'kitchen' | 'bar' | 'waiter';
-
-const ORDER_ROOM = /^order:[A-Za-z0-9-]+$/;
-const RESTAURANT_ROOM = /^restaurant:([0-9a-fA-F-]{36}):(kitchen|bar|waiter)$/;
+import { ORDER_ROOM, RESTAURANT_ROOM, isAuthorizedForRestaurantRoom, type Destination } from './roomAuth';
 
 const rooms = new Map<string, Set<WebSocket>>();
 
@@ -18,18 +13,6 @@ function join(room: string, socket: WebSocket): void {
 function leaveAll(socket: WebSocket): void {
   for (const members of rooms.values()) {
     members.delete(socket);
-  }
-}
-
-function isAuthorizedForRestaurantRoom(token: string | undefined, restaurantId: string, destination: Destination): boolean {
-  if (!token) return false;
-  try {
-    const payload = verifyStaffToken(token);
-    if (payload.restaurantId !== restaurantId) return false;
-    if (payload.role === 'admin') return true;
-    return payload.role === destination;
-  } catch {
-    return false;
   }
 }
 

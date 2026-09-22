@@ -6,7 +6,7 @@ import { trackingUrlFor } from '../../lib/urls';
 import { ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
-import { broadcast } from '../../realtime/socketServer';
+import { broadcastEvent } from '../../realtime/broadcaster';
 import { logger } from '../../lib/logger';
 
 export interface PlaceOrderResult {
@@ -74,13 +74,13 @@ export async function placeOrder(
 
   const destinationsInOrder = new Set(orderItems.map((item) => item.destination));
   for (const destination of destinationsInOrder) {
-    broadcast(`restaurant:${restaurant.id}:${destination}`, {
+    await broadcastEvent(`restaurant:${restaurant.id}:${destination}`, {
       type: 'new_order',
       table_number: table.table_number,
       order_public_token: order.public_token,
     });
   }
-  broadcast(`restaurant:${restaurant.id}:waiter`, {
+  await broadcastEvent(`restaurant:${restaurant.id}:waiter`, {
     type: 'order_placed',
     table_number: table.table_number,
     order_public_token: order.public_token,

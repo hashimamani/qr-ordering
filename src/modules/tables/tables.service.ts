@@ -7,7 +7,7 @@ import {
   type WaiterTableSession,
 } from './tables.repository';
 import { listMenuForRestaurant } from '../menu/menu.repository';
-import { broadcast } from '../../realtime/socketServer';
+import { broadcastEvent } from '../../realtime/broadcaster';
 
 export interface ResolveTableResult {
   restaurant: { name: string; slug: string };
@@ -47,7 +47,7 @@ export async function getWaiterView(restaurantId: string): Promise<WaiterTableSe
 
 export async function closeSession(restaurantId: string, sessionId: string): Promise<void> {
   await closeTableSession(restaurantId, sessionId);
-  broadcast(`restaurant:${restaurantId}:waiter`, {
+  await broadcastEvent(`restaurant:${restaurantId}:waiter`, {
     type: 'session_closed',
     table_session_id: sessionId,
   });

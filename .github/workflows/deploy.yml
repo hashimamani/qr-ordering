@@ -1,0 +1,56 @@
+name: Deploy
+
+# Requires an AWS_DEPLOY_ROLE_ARN repository secret (an IAM role this
+# workflow can assume via OIDC -- no long-lived access keys). Until that
+# secret is configured, configure-aws-credentials fails immediately and
+# nothing in this workflow can reach AWS. See README "Deploying for real"
+# before setting that secret -- this workflow provisions and updates real,
+# billed infrastructure, most notably the NAT Gateway (~$32-38/month) that
+# runs continuously once QrOrderingNetwork exists.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      - run: npm ci
+        working-directory: infra
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_DEPLOY_REGION || 'eu-west-1' }}
+
+      - name: cdk deploy
+        working-directory: infra
+        run: npx cdk deploy --all --require-approval never
+        env:
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          PUBLIC_ORDERING_BASE_URL: ${{ secrets.PUBLIC_ORDERING_BASE_URL }}
+
+      - name: Run database migrations
+        run: |
+          FUNCTION_NAME=$(aws cloudformation describe-stacks \
+            --stack-name QrOrderingMigration \
+            --query "Stacks[0].Outputs[?OutputKey=='MigrationFunctionName'].OutputValue" \
+            --output text)
+          aws lambda invoke --function-name "$FUNCTION_NAME" --payload '{}' /tmp/migrate-response.json
+          cat /tmp/migrate-response.json

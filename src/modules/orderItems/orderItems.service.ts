@@ -9,7 +9,7 @@ import { findOrderNotificationContext } from '../orders/orders.repository';
 import { findOrderByPublicToken } from '../tracking/tracking.repository';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { trackingUrlFor } from '../../lib/urls';
-import { broadcast } from '../../realtime/socketServer';
+import { broadcastEvent } from '../../realtime/broadcaster';
 import { logger } from '../../lib/logger';
 
 export async function getQueueForDestination(
@@ -32,14 +32,14 @@ export async function updateOrderItemStatus(
 ): Promise<void> {
   const result = await transitionOrderItemStatus(restaurantId, orderItemId, newStatus);
 
-  broadcast(`restaurant:${restaurantId}:${result.destination}`, {
+  await broadcastEvent(`restaurant:${restaurantId}:${result.destination}`, {
     type: 'item_status_changed',
     order_item_id: orderItemId,
     order_public_token: result.orderPublicToken,
     table_number: result.tableNumber,
     status: result.newStatus,
   });
-  broadcast(`restaurant:${restaurantId}:waiter`, {
+  await broadcastEvent(`restaurant:${restaurantId}:waiter`, {
     type: 'item_status_changed',
     order_item_id: orderItemId,
     order_public_token: result.orderPublicToken,
@@ -48,7 +48,7 @@ export async function updateOrderItemStatus(
   });
 
   const trackedOrder = await findOrderByPublicToken(result.orderPublicToken);
-  broadcast(`order:${result.orderPublicToken}`, {
+  await broadcastEvent(`order:${result.orderPublicToken}`, {
     type: 'status_changed',
     items: trackedOrder.items,
   });

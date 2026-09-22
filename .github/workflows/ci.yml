@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  app:
+    name: App - typecheck, test, migrate against real Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: qr_ordering
+          POSTGRES_PASSWORD: qr_ordering
+          POSTGRES_DB: qr_ordering
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qr_ordering"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://qr_ordering:qr_ordering@localhost:5432/qr_ordering
+      JWT_SECRET: ci-test-secret
+      PLATFORM_ADMIN_KEY: ci-test-platform-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run migrate:up
+      - run: npm test
+
+  infra:
+    name: Infra - typecheck and cdk synth (no AWS credentials, no deploy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci
+        working-directory: infra
+      - run: npx tsc --noEmit
+        working-directory: infra
+      # No AWS credentials are configured in this job on purpose -- synth
+      # of an environment-agnostic app (no CDK_DEFAULT_ACCOUNT) needs none,
+      # and that's also what keeps this job from being able to reach real
+      # AWS even by accident.
+      - run: npx cdk synth --quiet
+        working-directory: infra
