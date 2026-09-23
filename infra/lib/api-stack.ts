@@ -26,6 +26,7 @@ export interface ApiStackProps extends StackProps {
   webSocketEndpoint: string;
   publicBaseUrl: string;
   publicOrderingBaseUrl: string;
+  corsOrigins: string[];
 }
 
 /**
@@ -68,17 +69,6 @@ export class ApiStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
       logGroup,
-      bundling: {
-        // src/app.ts serves public/ as static files -- esbuild only
-        // follows static imports, so the non-imported public/ directory
-        // has to be copied into the bundle by hand (same pattern as
-        // MigrationStack's migrations/ copy).
-        commandHooks: {
-          beforeBundling: () => [],
-          afterBundling: (inputDir: string, outputDir: string) => [`cp -r ${inputDir}/public ${outputDir}/public`],
-          beforeInstall: () => [],
-        },
-      },
       environment: {
         DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
         APP_SECRET_ARN: props.appSecret.secretArn,
@@ -109,6 +99,21 @@ export class ApiStack extends Stack {
 
     const httpApi = new apigatewayv2.HttpApi(this, 'HttpApi', {
       defaultIntegration: new integrations.HttpLambdaIntegration('ApiIntegration', fn),
+      // The frontend (S3/CloudFront, plus localhost during dev) is now a
+      // genuinely different origin from the API -- POST/PATCH with JSON
+      // bodies and the Authorization header both trigger a CORS
+      // preflight, so this isn't optional the way it would be for a
+      // same-origin bundled setup.
+      corsPreflight: {
+        allowOrigins: props.corsOrigins,
+        allowMethods: [
+          apigatewayv2.CorsHttpMethod.GET,
+          apigatewayv2.CorsHttpMethod.POST,
+          apigatewayv2.CorsHttpMethod.PATCH,
+          apigatewayv2.CorsHttpMethod.DELETE,
+        ],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
     });
 
     // API Gateway's built-in usage-plan throttling covers /track/{token}

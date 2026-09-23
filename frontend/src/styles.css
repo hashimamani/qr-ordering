@@ -12,7 +12,11 @@ header {
 }
 header h1 { margin: 0; font-size: 18px; }
 header .sub { color: #a8a29e; font-size: 13px; margin-top: 2px; }
+header nav { margin-top: 10px; display: flex; gap: 14px; }
+header nav a { color: #d6d3d1; text-decoration: none; font-size: 13px; font-weight: 600; }
+header nav a.active, header nav a:hover { color: white; }
 main { max-width: 640px; margin: 0 auto; padding: 16px; }
+main.wide { max-width: 960px; }
 .card {
   background: white;
   border-radius: 10px;
@@ -32,7 +36,6 @@ main { max-width: 640px; margin: 0 auto; padding: 16px; }
 }
 .qty-controls span { min-width: 18px; text-align: center; font-weight: 600; }
 .unavailable { opacity: 0.5; }
-.unavailable .item-price::after { content: " (unavailable)"; }
 
 button.primary {
   width: 100%; padding: 14px; border-radius: 10px; border: none;
@@ -45,9 +48,9 @@ button.secondary {
 }
 button.danger { border-color: #fca5a5; color: #b91c1c; }
 
-input, select {
+input, select, textarea {
   width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d6d3d1;
-  font-size: 15px; margin-bottom: 10px;
+  font-size: 15px; margin-bottom: 10px; font-family: inherit;
 }
 label { font-size: 13px; color: #57534e; display: block; margin-bottom: 4px; }
 
@@ -71,3 +74,16 @@ label { font-size: 13px; color: #57534e; display: block; margin-bottom: 4px; }
 .conn-dot.live { background: #16a34a; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; }
 a.tracking-link { color: #16a34a; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.tabs button {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid #d6d3d1;
+  background: white; cursor: pointer; font-size: 14px; font-weight: 600; color: #57534e;
+}
+.tabs button.active { background: #1c1917; color: white; border-color: #1c1917; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+table.data-table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; }
+table.data-table th, table.data-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e7e5e4; font-size: 14px; }
+table.data-table th { background: #f5f5f4; font-size: 12px; text-transform: uppercase; color: #78716c; }
+.qr-preview { width: 160px; height: 160px; border: 1px solid #e7e5e4; border-radius: 8px; }

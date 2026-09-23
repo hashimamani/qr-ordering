@@ -2,10 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "qr-ordering-dev",
+      "name": "qr-ordering-api-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3010,
+      "autoPort": true
+    },
+    {
+      "name": "qr-ordering-frontend-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && npm run dev -- --port $PORT"],
+      "port": 5173,
       "autoPort": true
     }
   ]

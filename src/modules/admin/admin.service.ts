@@ -82,7 +82,11 @@ export async function createTableWithQrCode(
 ): Promise<CreatedTableWithQr> {
   const qrToken = generateToken();
   const table = await insertTable(restaurantId, { tableNumber, qrToken });
-  const orderingUrl = `${PUBLIC_ORDERING_BASE_URL}/r/${restaurantSlug}/t/${qrToken}`;
+  // /order (the React frontend's route), not /r/.../t/... (the raw JSON
+  // API path) -- PUBLIC_ORDERING_BASE_URL is the frontend's own origin
+  // now that it's a separate S3/CloudFront deployment, not bundled into
+  // this API's Lambda.
+  const orderingUrl = `${PUBLIC_ORDERING_BASE_URL}/order?slug=${restaurantSlug}&t=${qrToken}`;
   const qrDataUrl = await QRCode.toDataURL(orderingUrl, { errorCorrectionLevel: 'M', margin: 2 });
 
   return {

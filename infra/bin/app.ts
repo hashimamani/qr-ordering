@@ -8,6 +8,7 @@ import { WebSocketStack } from '../lib/websocket-stack';
 import { ApiStack } from '../lib/api-stack';
 import { NotificationWorkerStack } from '../lib/notification-worker-stack';
 import { MigrationStack } from '../lib/migration-stack';
+import { FrontendStack } from '../lib/frontend-stack';
 
 const app = new App();
 
@@ -20,11 +21,14 @@ const env = {
   region: 'eu-west-1',
 };
 
-// Every stack that carries a URL an app config needs to know ahead of
-// deploy (tracking links, generated QR codes) -- set for real before
-// `cdk deploy` once the frontend/PWA has a domain.
-const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'https://REPLACE_WITH_API_DOMAIN';
-const publicOrderingBaseUrl = process.env.PUBLIC_ORDERING_BASE_URL ?? publicBaseUrl;
+// The frontend (S3/CloudFront) is a separate origin from the API now, and
+// it's what tracking links and QR codes need to point at -- not the API
+// Gateway domain. FRONTEND_URL is unknown on the very first deploy (the
+// CloudFront distribution doesn't exist yet), so it falls back to a local
+// dev URL; set it for real and redeploy ApiStack + FrontendStack once
+// QrOrderingFrontend's CfnOutput is known.
+const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const corsOrigins = Array.from(new Set([frontendUrl, 'http://localhost:5173']));
 
 const network = new NetworkStack(app, 'QrOrderingNetwork', { env });
 
@@ -54,8 +58,9 @@ const api = new ApiStack(app, 'QrOrderingApi', {
   notificationsQueue: queue.notificationsQueue,
   connectionsTable: realtimeData.connectionsTable,
   webSocketEndpoint: webSocket.webSocketEndpoint,
-  publicBaseUrl,
-  publicOrderingBaseUrl,
+  publicBaseUrl: frontendUrl,
+  publicOrderingBaseUrl: frontendUrl,
+  corsOrigins,
 });
 api.addDependency(webSocket);
 
@@ -78,3 +83,5 @@ new MigrationStack(app, 'QrOrderingMigration', {
   dbName: data.dbName,
   appSecret: data.appSecret,
 });
+
+new FrontendStack(app, 'QrOrderingFrontend', { env });

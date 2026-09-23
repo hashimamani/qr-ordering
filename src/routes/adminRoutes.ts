@@ -142,8 +142,14 @@ adminRoutes.post(
 adminRoutes.get(
   '/admin/tables',
   asyncHandler(async (req, res) => {
-    const tables = await listTablesForRestaurant(req.staff!.restaurantId);
-    res.json({ tables });
+    // restaurant_slug alongside the tables list -- the admin frontend
+    // needs it to construct/preview each table's ordering URL and QR
+    // code client-side without a separate round trip per table.
+    const [tables, restaurant] = await Promise.all([
+      listTablesForRestaurant(req.staff!.restaurantId),
+      findRestaurantById(req.staff!.restaurantId),
+    ]);
+    res.json({ tables, restaurant_slug: restaurant.slug });
   }),
 );
 

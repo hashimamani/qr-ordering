@@ -118,14 +118,17 @@ export async function seedDatabase(): Promise<SeedResult> {
 }
 
 function printResult(result: SeedResult): void {
-  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3010';
+  // The frontend (React/Vite) is a separate app on its own origin now --
+  // FRONTEND_BASE_URL, not PUBLIC_BASE_URL (the API's own origin, used
+  // for tracking-link construction inside the backend itself).
+  const frontendBase = process.env.FRONTEND_BASE_URL ?? 'http://localhost:5173';
 
   console.log(`Seeded restaurant: ${result.restaurantSlug}\n`);
   console.log('Order as a customer:');
   for (const t of result.tables) {
-    console.log(`  Table ${t.table_number}: ${base}/app/order.html?slug=${result.restaurantSlug}&t=${t.qr_token}`);
+    console.log(`  Table ${t.table_number}: ${frontendBase}/order?slug=${result.restaurantSlug}&t=${t.qr_token}`);
   }
-  console.log(`\nStaff login (${base}/app/staff/login.html), password "${result.staffPassword}" for all:`);
+  console.log(`\nStaff login (${frontendBase}/staff/login), password "${result.staffPassword}" for all:`);
   for (const staff of result.staff) {
     console.log(`  ${staff.role}: ${staff.contact}`);
   }

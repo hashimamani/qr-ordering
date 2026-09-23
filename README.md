@@ -4,19 +4,27 @@ Multi-tenant SaaS: restaurants put a QR code on each table, customers order
 from their phone with no login, staff run kitchen/bar/waiter dashboards.
 Payment is collected manually by the waiter — no in-app payment in v1.
 
-## Status: all 9 build steps done, deployed live to AWS (eu-west-1)
+## Status: all 9 build steps done, deployed live to AWS (eu-west-1), real separate frontend
 
 The application (steps 1–7) is fully built and verified both locally and
 against the live deployment. AWS infrastructure (step 8) is deployed for
-real — all 8 CDK stacks are up in `eu-west-1`, migrated, seeded, and
-verified end-to-end: a real order placed against the live API triggers a
-real SMS via Africa's Talking, shows up live on the staff dashboards over
-the deployed WebSocket API, and updates the customer's tracking page in
-real time. Load testing (step 9) has only been run against the local
-server so far — worth re-running against the live deployment before
-calling this properly load-tested.
+real — all 9 CDK stacks are up in `eu-west-1` (including a dedicated
+`FrontendStack`), migrated, seeded, and verified end-to-end: a real order
+placed against the live API triggers a real SMS via Africa's Talking,
+shows up live on the staff dashboards over the deployed WebSocket API,
+and updates the customer's tracking page in real time. Load testing
+(step 9) has only been run against the local server so far — worth
+re-running against the live deployment before calling this properly
+load-tested.
 
-Two real bugs were only caught by actually deploying and testing live,
+The frontend was rebuilt from a Lambda-bundled test harness into a real,
+separate production app: a React + Vite SPA hosted on S3 + CloudFront
+(its own CDK stack, its own origin, talking to the API purely over CORS),
+with role-gated routing for all four staff roles plus a new admin
+dashboard (menu, tables/QR, staff management) that was previously
+explicitly deferred. See "Frontend" below.
+
+Three real bugs were only caught by actually deploying and testing live,
 not by local development or `cdk synth`:
 - RDS's default parameter group rejects unencrypted connections; the app
   and `node-pg-migrate` both needed SSL configured (`src/db/pool.ts`,
@@ -27,19 +35,26 @@ not by local development or `cdk synth`:
   real send would have been logged as `failed` and retried needlessly
   despite actually delivering. Fixed to check the `status: "Success"`
   string field instead (`src/modules/notifications/notifications.providers.ts`).
+- Africa's Talking's SDK rejects an explicitly-empty `from` field outright
+  (not just an absent one) — when no sender ID is configured, the call was
+  passing `from: ''`, so every real SMS failed with `"from" is not allowed
+  to be empty`. Fixed by only including `from` in the request when a
+  sender ID is actually configured (`notifications.providers.ts`).
 
 See "Deploying for real" for how to reproduce this deployment and what it
-actually took (including the NAT Gateway vs NAT instance saga).
+actually took (including the NAT Gateway vs NAT instance saga and the
+frontend's own deploy quirk).
 
 ## Live deployment
 
 | | |
 |---|---|
+| Frontend | `https://d30j37oth3tsgq.cloudfront.net` |
 | API | `https://gmejeftua9.execute-api.eu-west-1.amazonaws.com` |
 | WebSocket | `wss://mlpy8jz5yb.execute-api.eu-west-1.amazonaws.com/prod` |
 | Region | `eu-west-1` |
-| Order (table 1) | `{API}/app/order.html?slug=amani-grill&t=<table 1's qr_token>` |
-| Staff login | `{API}/app/staff/login.html` (password `password123`) |
+| Order (table 1) | `{Frontend}/order?slug=amani-grill&t=<table 1's qr_token>` |
+| Staff login | `{Frontend}/staff/login` (password `password123`) |
 
 Table `qr_token`s change every time the seed Lambda runs — query RDS or
 re-invoke the seed Lambda to get current ones rather than assuming the
@@ -47,7 +62,8 @@ values are still live.
 
 ## Stack
 
-- **Language**: TypeScript / Node 20
+- **Language**: TypeScript / Node 22 (Lambdas upgraded off Node 20.x after
+  AWS's deprecation notice — see "Node 22 runtime" below)
 - **HTTP**: Express (`src/app.ts`) — a thin adapter; route bodies are
   one-line calls into `modules/*/*.service.ts`. `src/server.ts` runs it
   locally; `src/lambda.ts` wraps the same `buildApp()` for API Gateway via
@@ -64,9 +80,12 @@ values are still live.
 - **Notifications**: pluggable `NotificationProvider`/`NotificationQueue`
   abstractions — Africa's Talking (SMS) + AWS SES (email) providers, an
   in-process queue locally / SQS in production
-- **QR codes**: `qrcode`, rendered server-side as base64 PNG
+- **QR codes**: `qrcode`, rendered server-side (admin API) and client-side
+  (frontend, for tables created before a QR image existed) as PNG
 - **Logging**: `pino` / `pino-http`, structured JSON
 - **Tests**: `vitest`
+- **Frontend**: React + React Router v7 + Vite, its own npm project under
+  `frontend/`, hosted on S3 + CloudFront — see "Frontend" below
 - **Infra**: AWS CDK (TypeScript), under `infra/` as its own npm project
 
 ## Design decisions carried over from the spec (do not "fix" these)
@@ -189,6 +208,41 @@ connecting. Events pushed: `new_order`, `order_placed`,
 `item_status_changed`, `status_changed`, `session_closed`. HTTP polling
 still works unchanged — the WebSocket layer is additive.
 
+## Frontend
+
+`frontend/` is a genuinely separate app — its own `package.json`, its own
+build, its own deployed origin (S3 + CloudFront) — not bundled into the
+API Lambda the way the first working version was. It talks to the API
+only over HTTP/WebSocket across origins, via CORS (`corsPreflight` on the
+HTTP API in `api-stack.ts`; a small dev-only CORS middleware in
+`src/app.ts` for local use since `vite dev` and `npm run dev` run on
+different ports).
+
+Routes:
+- `/order?slug=..&t=..`, `/track/:token` — customer flow, no auth
+- `/staff/login` — redirects by role after login: `admin` → `/admin`,
+  `kitchen` → `/staff/kitchen`, `bar` → `/staff/bar`, `waiter` →
+  `/staff/waiter`
+- `/staff/kitchen`, `/staff/bar`, `/staff/waiter` — role-gated dashboards
+- `/admin` — tabs for menu (category/item CRUD), tables (create + QR,
+  server-generated PNG for new tables, client-side `qrcode` render for
+  existing ones), and staff (create + list; no edit/delete, matching what
+  the API supports)
+
+Auth: the staff JWT issued by `POST /auth/login` is decoded client-side
+(`AuthContext.tsx`) purely to drive which nav links and routes render —
+**this is explicitly a UX convenience, not a security boundary.** Every
+API request still carries the JWT as a bearer token, and every backend
+route independently re-derives `restaurant_id` + `role` from it and
+re-checks tenant/role scope server-side; a user editing `localStorage` to
+fake a role gets past the frontend's `ProtectedRoute` but every request
+still 401s/403s at the API.
+
+Local dev: `npm install && npm run dev` inside `frontend/` (port 5173,
+`.env.local` points it at the local API on 3010). Build for deploy:
+`npm run build` (reads `.env.production`, gitignored — holds the real
+deployed API/WS URLs, not secrets) emits static assets to `frontend/dist`.
+
 ## Local setup
 
 ```bash
@@ -209,7 +263,7 @@ real provider.
 
 **Currently deployed** to AWS account `304442552123`, region `eu-west-1`
 (chosen for latency to Kenya/Africa's Talking over the account's default
-`us-east-1`). All 8 stacks are up, migrated, and seeded with the same
+`us-east-1`). All 9 stacks are up, migrated, and seeded with the same
 demo restaurant (`amani-grill`) the local seed script creates.
 
 ```bash
@@ -227,21 +281,56 @@ After deploying:
 2. Invoke the migration Lambda once, then the seed Lambda (see
    `QrOrderingMigration`'s `CfnOutput`s for both function names):
    `aws lambda invoke --function-name <name> --payload '{}' out.json`
-3. Set `PUBLIC_BASE_URL`/`PUBLIC_ORDERING_BASE_URL` to the real
-   `QrOrderingApi.HttpApiUrl` output and redeploy `QrOrderingApi` — they
-   default to a placeholder on first deploy, since the URL doesn't exist
-   until after that first deploy creates it.
+3. Set `FRONTEND_URL` in the shell CDK runs in to the real
+   `QrOrderingFrontend.FrontendUrl` output (its CloudFront domain) and
+   redeploy `QrOrderingApi` — this feeds both `corsOrigins` (so the API
+   accepts requests from the real frontend origin) and
+   `PUBLIC_BASE_URL`/`PUBLIC_ORDERING_BASE_URL` (so tracking links and
+   generated QR codes point at it). It defaults to `localhost:5173` on
+   first deploy, since the CloudFront URL doesn't exist until after that
+   first deploy creates it.
+4. Build and publish the frontend itself — **not** done by `cdk deploy`,
+   see below:
+   ```bash
+   cd frontend
+   npm install
+   # .env.production holds the real deployed API/WS URLs (gitignored, not secret)
+   npm run build
+   aws s3 sync dist s3://<QrOrderingFrontend.FrontendBucketName> --delete
+   aws cloudfront create-invalidation \
+     --distribution-id <QrOrderingFrontend.FrontendDistributionId> \
+     --paths '/*'
+   ```
 
-**Two things that only surfaced deploying for real, not from `cdk
-synth`:** RDS needs SSL (`?sslmode=no-verify` appended to `DATABASE_URL`
-in `awsSecrets.ts`, plus `ssl` config in `db/pool.ts`) — local Docker
+**Things that only surfaced deploying for real, not from `cdk synth`:**
+RDS needs SSL (`?sslmode=no-verify` appended to `DATABASE_URL` in
+`awsSecrets.ts`, plus `ssl` config in `db/pool.ts`) — local Docker
 Postgres has none configured, so nothing local would have caught this.
-And the migration/seed Lambdas take a `Requested update requires the
+The migration/seed Lambdas take a `Requested update requires the
 creation of a new physical resource` style replacement badly the first
 time you touch `NetworkStack` after they've already been granted access —
 not actually a problem in practice, just worth knowing `cdk deploy
 QrOrderingNetwork` alone is the right scope for network-only changes
-rather than `--all`.
+rather than `--all`. And `aws-s3-deployment`'s `BucketDeployment`
+construct — the obvious way to have CDK upload `frontend/dist` itself —
+fails on this CDK version (2.155.0): its custom-resource Lambda bundles
+an awscli/urllib3 build that uses Python 3.10+ union syntax (`bytes |
+str`) but runs on a Python 3.9 runtime, so every deploy attempt failed
+immediately with `TypeError: unsupported operand type(s) for |: 'type'
+and 'type'`. `FrontendStack` deliberately doesn't use it — the manual
+`aws s3 sync` + `create-invalidation` step above is the workaround, the
+same "CDK provisions infra, a scripted AWS CLI step handles content"
+pattern already used for migrations and seeding.
+
+### Node 22 runtime
+
+All Lambda functions were upgraded from `nodejs20.x` to `nodejs22.x`
+(`infra/lib/runtime.ts`, referenced from every stack that defines a
+function) after AWS's Node 20 deprecation notice. Each stack's shared
+`logRetention` option was also replaced with an explicit `logs.LogGroup`
+construct per function — `logRetention` is deprecated in this CDK
+version and was emitting a synth-time warning independent of the runtime
+change.
 
 `.github/workflows/deploy.yml` automates this on merge to `master`, but only
 once an `AWS_DEPLOY_ROLE_ARN` repository secret exists (an IAM role the
@@ -304,7 +393,7 @@ calling v1 load-tested, per the original build order's own framing.
   cross-tenant `category_id`; generated QR PNGs are valid images
 - `npx vitest run` — 7 passing tests; `npx tsc --noEmit` — clean under
   `strict`, both in the app and in `infra/`
-- `cd infra && npx cdk synth` — all 8 stacks synthesize with no errors;
+- `cd infra && npx cdk synth` — all 9 stacks synthesize with no errors;
   one NAT Gateway, RDS confirmed `PubliclyAccessible: false`
 
 ## Verified against the live AWS deployment
@@ -325,9 +414,19 @@ calling v1 load-tested, per the original build order's own framing.
   live `status_changed` push when a staff status update happened via the
   REST API — confirms the DynamoDB-backed broadcast path
   (`dynamoBroadcaster.ts`) works end-to-end, not just the local `ws` path
-- Generated a real QR code encoding the live ordering URL and confirmed
-  the `/app/*` frontend loads over the deployed Lambda (bundled via
-  `api-stack.ts`'s `afterBundling` hook, not served from local disk)
+- The real React frontend on CloudFront, verified live via the Browser
+  pane against the deployed stack, not just `cdk synth`/unit tests:
+  placing a customer order from `/order` through to the tracking page
+  with live WebSocket status updates; admin login → menu/table/staff CRUD
+  across all three admin tabs, including generating a new table's QR
+  code server-side and rendering an existing table's QR client-side;
+  kitchen-role login redirecting to `/staff/kitchen` with only
+  kitchen-relevant nav links shown, confirming the client-side role gate
+  matches the JWT the API actually issued
+- Confirmed CORS works cross-origin in production: the frontend on
+  `https://d30j37oth3tsgq.cloudfront.net` successfully calls the API on
+  a different `execute-api.eu-west-1.amazonaws.com` origin with no CORS
+  errors, via the HTTP API's `corsPreflight` config
 
 ## Known gaps to close before this counts as "production"
 
@@ -354,6 +453,15 @@ calling v1 load-tested, per the original build order's own framing.
   knowing before assuming `synth` is fully offline; `cdk.context.json`
   (which would cache the discovered account id) is gitignored so this
   never gets committed
+- Frontend deploys are a manual `aws s3 sync` + CloudFront invalidation
+  after `npm run build` (see "Deploying for real"), not part of
+  `cdk deploy` — `deploy.yml` doesn't build/publish the frontend on merge
+  yet, so a `master` merge that only touches `frontend/` won't actually
+  update the live site until that step is added or run by hand
+- No automated tests for the frontend yet (no component/e2e test runner
+  wired into `frontend/`'s `package.json`) — the "Verified against the
+  live AWS deployment" section above is manual browser verification, not
+  a repeatable test suite
 
 ## Build order (from the original spec)
 
