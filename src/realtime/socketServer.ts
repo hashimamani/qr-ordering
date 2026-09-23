@@ -1,7 +1,14 @@
 import type { Server as HttpServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { logger } from '../lib/logger';
-import { ORDER_ROOM, RESTAURANT_ROOM, isAuthorizedForRestaurantRoom, type Destination } from './roomAuth';
+import {
+  ORDER_ROOM,
+  RESTAURANT_ROOM,
+  WAITER_ROOM,
+  isAuthorizedForRestaurantRoom,
+  isAuthorizedForWaiterRoom,
+  type Destination,
+} from './roomAuth';
 
 const rooms = new Map<string, Set<WebSocket>>();
 
@@ -51,6 +58,18 @@ export function initRealtime(httpServer: HttpServer): WebSocketServer {
       if (restaurantMatch) {
         const [, restaurantId, destination] = restaurantMatch;
         if (!isAuthorizedForRestaurantRoom(msg.token, restaurantId, destination as Destination)) {
+          socket.send(JSON.stringify({ type: 'error', message: 'not authorized for this room' }));
+          return;
+        }
+        join(msg.room, socket);
+        socket.send(JSON.stringify({ type: 'joined', room: msg.room }));
+        return;
+      }
+
+      const waiterMatch = msg.room.match(WAITER_ROOM);
+      if (waiterMatch) {
+        const [, restaurantId, staffId] = waiterMatch;
+        if (!isAuthorizedForWaiterRoom(msg.token, restaurantId, staffId)) {
           socket.send(JSON.stringify({ type: 'error', message: 'not authorized for this room' }));
           return;
         }

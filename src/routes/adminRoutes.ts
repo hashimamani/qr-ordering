@@ -8,6 +8,7 @@ import {
   createMenuItemSchema,
   updateMenuItemSchema,
   createTableSchema,
+  assignWaiterSchema,
 } from '../modules/admin/admin.validation';
 import { createStaffUserSchema } from '../modules/staff/staff.validation';
 import {
@@ -22,6 +23,7 @@ import {
   updateMenuItemById,
   deleteMenuItemById,
   listTablesForRestaurant,
+  assignWaiterToTable,
 } from '../modules/admin/admin.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
 import { listStaffUsersForRestaurant } from '../modules/staff/staff.repository';
@@ -144,6 +146,21 @@ adminRoutes.get(
       findRestaurantById(req.staff!.restaurantId),
     ]);
     res.json({ tables, restaurant_slug: restaurant.slug });
+  }),
+);
+
+// The emergency-handoff path, not routine table management -- normal
+// assignment is automatic (round robin on first order/call-waiter, see
+// tables.repository.ts). This exists for an admin moving an already-active
+// table to a different waiter (sick, leaving mid-shift), which is why
+// assignWaiterToTable has no "blocked while active" guard.
+adminRoutes.patch(
+  '/admin/tables/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = assignWaiterSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid assignment payload', parsed.error.flatten());
+    const table = await assignWaiterToTable(req.staff!.restaurantId, req.params.id, parsed.data.assigned_waiter_id);
+    res.json(table);
   }),
 );
 

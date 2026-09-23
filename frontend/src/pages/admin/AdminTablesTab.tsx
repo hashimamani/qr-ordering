@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { apiFetch, ApiError } from '../../api/client';
-import type { AdminTable, CreatedTableWithQr } from '../../api/types';
+import type { AdminTable, CreatedTableWithQr, StaffUserSummary } from '../../api/types';
 
 // The frontend's own origin is the customer ordering base -- this static
 // build is what the QR code needs to point at, not the API's domain.
@@ -17,6 +17,8 @@ export function AdminTablesTab() {
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<CreatedTableWithQr | null>(null);
   const [qrPreviews, setQrPreviews] = useState<Record<string, string>>({});
+  const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
+  const [reassigning, setReassigning] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiFetch<{ tables: AdminTable[]; restaurant_slug: string }>('/admin/tables', { auth: true })
@@ -25,9 +27,30 @@ export function AdminTablesTab() {
         setRestaurantSlug(data.restaurant_slug);
       })
       .catch((err: ApiError) => setError(err.message));
+    apiFetch<{ staff: StaffUserSummary[] }>('/admin/staff', { auth: true })
+      .then((data) => setWaiters(data.staff.filter((s) => s.role === 'waiter')))
+      .catch(() => {});
   }, []);
 
   useEffect(load, [load]);
+
+  async function reassign(tableId: string, waiterId: string) {
+    if (!waiterId) return;
+    setReassigning(tableId);
+    setError('');
+    try {
+      await apiFetch(`/admin/tables/${tableId}`, {
+        method: 'PATCH',
+        auth: true,
+        body: { assigned_waiter_id: waiterId },
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setReassigning(null);
+    }
+  }
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -86,6 +109,10 @@ export function AdminTablesTab() {
 
       <div className="table-block">
         <h3>All tables</h3>
+        <p className="sub">
+          Tables get a waiter automatically (round robin) on their first order or call-waiter press. Reassign
+          below only for a handoff mid-shift -- a waiter going home sick, etc.
+        </p>
         {tables.length === 0 && <div className="empty-state">No tables yet.</div>}
         {tables.map((table) => (
           <div key={table.id} className="card item-row">
@@ -96,6 +123,23 @@ export function AdminTablesTab() {
                   {orderingUrlFor(restaurantSlug, table.qr_token)}
                 </div>
               )}
+              <div className="item-desc">
+                {table.assigned_waiter_name ? `Assigned to ${table.assigned_waiter_name}` : 'Unassigned'}
+              </div>
+              <select
+                value=""
+                disabled={reassigning === table.id || waiters.length === 0}
+                onChange={(e) => reassign(table.id, e.target.value)}
+              >
+                <option value="">Reassign to…</option>
+                {waiters
+                  .filter((w) => w.id !== table.assigned_waiter_id)
+                  .map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+              </select>
             </div>
             {qrPreviews[table.id] && <img className="qr-preview" style={{ width: 80, height: 80 }} src={qrPreviews[table.id]} alt="" />}
           </div>

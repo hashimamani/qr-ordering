@@ -3,7 +3,14 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 import { loadSecretsIntoEnv } from './lib/awsSecrets';
-import { ORDER_ROOM, RESTAURANT_ROOM, isAuthorizedForRestaurantRoom, type Destination } from './realtime/roomAuth';
+import {
+  ORDER_ROOM,
+  RESTAURANT_ROOM,
+  WAITER_ROOM,
+  isAuthorizedForRestaurantRoom,
+  isAuthorizedForWaiterRoom,
+  type Destination,
+} from './realtime/roomAuth';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const CONNECTION_TTL_SECONDS = 6 * 60 * 60; // safety net for connections that never sent $disconnect
@@ -59,6 +66,18 @@ export const defaultHandler: APIGatewayProxyWebsocketHandlerV2 = async (event) =
   if (restaurantMatch) {
     const [, restaurantId, destination] = restaurantMatch;
     if (!isAuthorizedForRestaurantRoom(msg.token, restaurantId, destination as Destination)) {
+      await reply({ type: 'error', message: 'not authorized for this room' });
+      return { statusCode: 200, body: 'ok' };
+    }
+    await joinRoom(connectionId!, msg.room);
+    await reply({ type: 'joined', room: msg.room });
+    return { statusCode: 200, body: 'ok' };
+  }
+
+  const waiterMatch = msg.room.match(WAITER_ROOM);
+  if (waiterMatch) {
+    const [, restaurantId, staffId] = waiterMatch;
+    if (!isAuthorizedForWaiterRoom(msg.token, restaurantId, staffId)) {
       await reply({ type: 'error', message: 'not authorized for this room' });
       return { statusCode: 200, body: 'ok' };
     }

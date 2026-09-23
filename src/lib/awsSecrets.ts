@@ -18,6 +18,9 @@ interface AppSecret {
   africastalkingUsername?: string;
   africastalkingSenderId?: string;
   sesFromAddress?: string;
+  vapidPublicKey?: string;
+  vapidPrivateKey?: string;
+  vapidSubject?: string;
 }
 
 /**
@@ -72,6 +75,9 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         process.env.AFRICASTALKING_USERNAME = appSecret.africastalkingUsername ?? '';
         process.env.AFRICASTALKING_SENDER_ID = appSecret.africastalkingSenderId ?? '';
         process.env.SES_FROM_ADDRESS = appSecret.sesFromAddress ?? '';
+        process.env.VAPID_PUBLIC_KEY = appSecret.vapidPublicKey ?? '';
+        process.env.VAPID_PRIVATE_KEY = appSecret.vapidPrivateKey ?? '';
+        process.env.VAPID_SUBJECT = appSecret.vapidSubject ?? '';
       }),
     );
   }

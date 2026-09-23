@@ -4,12 +4,14 @@ import type { WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
+import { usePushSubscription } from '../../hooks/usePushSubscription';
 
 export function WaiterPage() {
   const { session } = useAuth();
   const [sessions, setSessions] = useState<WaiterTableSession[]>([]);
   const [error, setError] = useState('');
   const [closingId, setClosingId] = useState<string | null>(null);
+  const push = usePushSubscription();
 
   const load = useCallback(() => {
     apiFetch<{ table_sessions: WaiterTableSession[] }>('/staff/tables', { auth: true })
@@ -20,7 +22,7 @@ export function WaiterPage() {
   useEffect(load, [load]);
 
   const { connected } = useRealtime(
-    session ? `restaurant:${session.restaurantId}:waiter` : null,
+    session ? `restaurant:${session.restaurantId}:waiter:${session.staffId}` : null,
     session?.token ?? null,
     () => load(),
   );
@@ -41,12 +43,21 @@ export function WaiterPage() {
   return (
     <StaffLayout title="Waiter" connected={connected}>
       {error && <div className="error-banner">{error}</div>}
+      {session?.role === 'waiter' && push.status !== 'enabled' && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          {push.error && <div className="error-banner">{push.error}</div>}
+          <button className="secondary" disabled={push.status === 'enabling'} onClick={push.enable}>
+            {push.status === 'enabling' ? 'Enabling…' : 'Enable notifications'}
+          </button>
+        </div>
+      )}
       {sessions.length === 0 && <div className="empty-state">No active tables.</div>}
       {sessions.map((ts) => (
         <div key={ts.session_id} className="table-block">
           <div className="top-bar">
             <h3>
-              Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>
+              Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>{' '}
+              {!ts.assigned_waiter_id && <span className="status-pill">unassigned</span>}
             </h3>
             <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => closeTable(ts.session_id)}>
               Close table

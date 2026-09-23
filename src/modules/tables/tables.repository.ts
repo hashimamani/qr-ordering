@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
-import { ConflictError, NotFoundError } from '../../lib/errors';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors';
 
 export interface Restaurant {
   id: string;
@@ -106,6 +106,98 @@ export async function findOrCreateActiveSession(tableId: string): Promise<TableS
   }
 }
 
+/**
+ * The normal way a table gets a waiter -- called on the first order or
+ * call-waiter press at a still-unassigned table. Picks whichever `waiter`
+ * in the restaurant has gone longest without holding a table (their most
+ * recent `assigned_at` across all tables, oldest first; never having held
+ * one sorts first). No-ops if the table already has an assignee (first
+ * caller wins any race between a simultaneous order and call-waiter
+ * press), and returns null without error if the restaurant has no waiters
+ * yet. Row-locks the table for the same reason findOrCreateActiveSession
+ * does.
+ */
+export async function assignNextWaiterRoundRobin(restaurantId: string, tableId: string): Promise<string | null> {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query<{ assigned_waiter_id: string | null }>(
+      'SELECT assigned_waiter_id FROM "table" WHERE id = $1 FOR UPDATE',
+      [tableId],
+    );
+    const existing = current.rows[0]?.assigned_waiter_id ?? null;
+    if (existing) {
+      await client.query('COMMIT');
+      return existing;
+    }
+
+    const next = await client.query<{ id: string }>(
+      `SELECT s.id
+       FROM staff_user s
+       LEFT JOIN (
+         SELECT assigned_waiter_id, MAX(assigned_at) AS last_assigned_at
+         FROM "table"
+         WHERE restaurant_id = $1 AND assigned_waiter_id IS NOT NULL
+         GROUP BY assigned_waiter_id
+       ) recency ON recency.assigned_waiter_id = s.id
+       WHERE s.restaurant_id = $1 AND s.role = 'waiter'
+       ORDER BY recency.last_assigned_at ASC NULLS FIRST, s.id
+       LIMIT 1`,
+      [restaurantId],
+    );
+    const waiterId = next.rows[0]?.id ?? null;
+    if (waiterId) {
+      await client.query('UPDATE "table" SET assigned_waiter_id = $1, assigned_at = now() WHERE id = $2', [
+        waiterId,
+        tableId,
+      ]);
+    }
+    await client.query('COMMIT');
+    return waiterId;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Looks up who's currently assigned to a table -- used at broadcast time. */
+export async function findAssignedWaiterForTable(tableId: string): Promise<string | null> {
+  const result = await query<{ assigned_waiter_id: string | null }>(
+    'SELECT assigned_waiter_id FROM "table" WHERE id = $1',
+    [tableId],
+  );
+  return result.rows[0]?.assigned_waiter_id ?? null;
+}
+
+export interface TableContext {
+  restaurant_id: string;
+  table_id: string;
+  table_number: string;
+  assigned_waiter_id: string | null;
+}
+
+/**
+ * Resolves a customer's order token to its table -- for the call-waiter
+ * button. Kept separate from tracking.repository.ts's findOrderByPublicToken,
+ * which has a deliberate comment restricting it to single-order-scoped
+ * data only; this one intentionally joins out to the table.
+ */
+export async function findTableContextByPublicToken(publicToken: string): Promise<TableContext> {
+  const result = await query<TableContext>(
+    `SELECT t.restaurant_id, t.id AS table_id, t.table_number, t.assigned_waiter_id
+     FROM "order" o
+     JOIN table_session ts ON ts.id = o.table_session_id
+     JOIN "table" t ON t.id = ts.table_id
+     WHERE o.public_token = $1`,
+    [publicToken],
+  );
+  const context = result.rows[0];
+  if (!context) throw new NotFoundError('Order not found');
+  return context;
+}
+
 export interface WaiterOrderItem {
   menu_item_name: string;
   quantity: number;
@@ -124,28 +216,36 @@ export interface WaiterTableSession {
   session_status: 'active' | 'awaiting_payment' | 'closed';
   table_number: string;
   opened_at: string;
+  assigned_waiter_id: string | null;
   orders: WaiterOrder[];
 }
 
 /**
  * Each Order is rendered as its own block, never flattened into a
  * table-level total -- orders at the same table are billed independently.
+ *
+ * `waiterId` scopes the result to that waiter's own tables plus any still-
+ * unassigned ones -- pass it only for the `waiter` role; omit it for
+ * `admin`, who sees every table.
  */
 export async function listActiveTableSessionsForRestaurant(
   restaurantId: string,
+  waiterId?: string,
 ): Promise<WaiterTableSession[]> {
   const sessions = await query<{
     session_id: string;
     session_status: WaiterTableSession['session_status'];
     table_number: string;
     opened_at: string;
+    assigned_waiter_id: string | null;
   }>(
-    `SELECT ts.id AS session_id, ts.status AS session_status, t.table_number, ts.opened_at
+    `SELECT ts.id AS session_id, ts.status AS session_status, t.table_number, ts.opened_at, t.assigned_waiter_id
      FROM table_session ts
      JOIN "table" t ON t.id = ts.table_id
      WHERE t.restaurant_id = $1 AND ts.status IN ('active', 'awaiting_payment')
+       ${waiterId ? 'AND (t.assigned_waiter_id = $2 OR t.assigned_waiter_id IS NULL)' : ''}
      ORDER BY t.table_number, ts.opened_at`,
-    [restaurantId],
+    waiterId ? [restaurantId, waiterId] : [restaurantId],
   );
 
   if (sessions.rows.length === 0) return [];
@@ -197,21 +297,67 @@ export async function listActiveTableSessionsForRestaurant(
   }));
 }
 
-export async function closeTableSession(restaurantId: string, sessionId: string): Promise<void> {
-  const result = await query<{ id: string; status: TableSession['status']; restaurant_id: string }>(
-    `SELECT ts.id, ts.status, t.restaurant_id
-     FROM table_session ts
-     JOIN "table" t ON t.id = ts.table_id
-     WHERE ts.id = $1`,
-    [sessionId],
-  );
-  const session = result.rows[0];
-  if (!session || session.restaurant_id !== restaurantId) {
-    throw new NotFoundError('Table session not found');
-  }
-  if (session.status === 'closed') {
-    throw new ConflictError('Table session is already closed');
-  }
+export interface CloseSessionResult {
+  tableId: string;
+  previousAssignedWaiterId: string | null;
+}
 
-  await query('UPDATE table_session SET status = $1, closed_at = now() WHERE id = $2', ['closed', sessionId]);
+/**
+ * Closing releases the table's waiter assignment automatically (back to
+ * NULL, ready for round robin next time) -- waiters never self-release, so
+ * this is the only path a table becomes unassigned again short of an
+ * admin's emergency handoff. A `waiter` caller may only close a table
+ * that's unassigned or assigned to them; `admin` can close any.
+ */
+export async function closeTableSession(
+  restaurantId: string,
+  sessionId: string,
+  requestingStaff: { id: string; role: string },
+): Promise<CloseSessionResult> {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<{
+      status: TableSession['status'];
+      restaurant_id: string;
+      table_id: string;
+      assigned_waiter_id: string | null;
+    }>(
+      `SELECT ts.status, t.restaurant_id, t.id AS table_id, t.assigned_waiter_id
+       FROM table_session ts
+       JOIN "table" t ON t.id = ts.table_id
+       WHERE ts.id = $1
+       FOR UPDATE`,
+      [sessionId],
+    );
+    const session = result.rows[0];
+    if (!session || session.restaurant_id !== restaurantId) {
+      throw new NotFoundError('Table session not found');
+    }
+    if (session.status === 'closed') {
+      throw new ConflictError('Table session is already closed');
+    }
+    if (
+      requestingStaff.role === 'waiter' &&
+      session.assigned_waiter_id &&
+      session.assigned_waiter_id !== requestingStaff.id
+    ) {
+      throw new ForbiddenError('This table is assigned to a different waiter');
+    }
+
+    await client.query('UPDATE table_session SET status = $1, closed_at = now() WHERE id = $2', [
+      'closed',
+      sessionId,
+    ]);
+    await client.query('UPDATE "table" SET assigned_waiter_id = NULL, assigned_at = NULL WHERE id = $1', [
+      session.table_id,
+    ]);
+    await client.query('COMMIT');
+    return { tableId: session.table_id, previousAssignedWaiterId: session.assigned_waiter_id };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

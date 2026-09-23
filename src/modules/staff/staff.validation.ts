@@ -12,3 +12,11 @@ export const createStaffUserSchema = z.object({
   phone_or_email: z.string().min(3).max(254),
   password: z.string().min(8).max(200),
 });
+
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+});

@@ -76,6 +76,7 @@ export interface WaiterTableSession {
   session_status: 'active' | 'awaiting_payment' | 'closed';
   table_number: string;
   opened_at: string;
+  assigned_waiter_id: string | null;
   orders: WaiterOrder[];
 }
 
@@ -93,6 +94,8 @@ export interface AdminTable {
   restaurant_id: string;
   table_number: string;
   qr_token: string;
+  assigned_waiter_id: string | null;
+  assigned_waiter_name: string | null;
 }
 
 export interface CreatedTableWithQr {
@@ -115,4 +118,8 @@ export interface RestaurantSummary {
 
 export interface RestaurantSignupResponse {
   restaurant_id: string;
+}
+
+export interface VapidPublicKeyResponse {
+  publicKey: string;
 }

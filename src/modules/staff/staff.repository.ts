@@ -51,3 +51,14 @@ export async function listStaffUsersForRestaurant(
   );
   return result.rows;
 }
+
+// The zero-waiters edge case in broadcastToTableWaiter's fallback --
+// otherwise round robin always resolves a real assignee before this
+// would ever be consulted.
+export async function listWaiterIdsForRestaurant(restaurantId: string): Promise<string[]> {
+  const result = await query<{ id: string }>(
+    `SELECT id FROM staff_user WHERE restaurant_id = $1 AND role = 'waiter'`,
+    [restaurantId],
+  );
+  return result.rows.map((r) => r.id);
+}

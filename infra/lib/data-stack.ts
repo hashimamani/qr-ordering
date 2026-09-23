@@ -59,19 +59,29 @@ export class DataStack extends Stack {
 
     // generateSecretString only auto-fills one key (jwtSecret) -- CDK
     // creates the secret, it never invents values for the rest.
-    // platformAdminJwtSecret and the Africa's Talking/SES credentials
-    // ship as empty placeholders and must be set by hand after deploy
-    // (same pattern as the AfricasTalkingSecret/TwilioSecret split in the
-    // sms-notify project's DataStack), e.g.:
+    // platformAdminJwtSecret, VAPID (web push), and the Africa's Talking/SES
+    // credentials ship as empty placeholders and must be set by hand after
+    // deploy (same pattern as the AfricasTalkingSecret/TwilioSecret split
+    // in the sms-notify project's DataStack), e.g.:
     //   aws secretsmanager put-secret-value --secret-id <arn> \
     //     --secret-string '{"jwtSecret":"...","platformAdminJwtSecret":"...", ...}'
     // platformAdminJwtSecret is deliberately separate from jwtSecret --
     // it signs the platform_admin (super-admin/onboarding) JWT, a
     // distinct identity from staff JWTs, so a leaked staff secret can
     // never forge a platform-admin token.
+    //
+    // IMPORTANT: changing this secretStringTemplate on an ALREADY-DEPLOYED
+    // secret causes CloudFormation to regenerate the whole secret on the
+    // next `cdk deploy` that touches this stack, wiping every manually-set
+    // field (including ones not being touched by that particular edit)
+    // back to these empty placeholders -- confirmed live the hard way when
+    // adding platformAdminJwtSecret silently wiped the Africa's Talking
+    // credentials and broke SMS. Any future edit here must be followed
+    // immediately by a `put-secret-value` restoring every real field, not
+    // just the new one.
     this.appSecret = new secretsmanager.Secret(this, 'AppSecret', {
       description:
-        "JWT signing secret (auto-generated) plus the platform-admin JWT secret and Africa's Talking/SES credentials (set by hand after deploy)",
+        "JWT signing secret (auto-generated) plus the platform-admin JWT secret, VAPID web-push keys, and Africa's Talking/SES credentials (set by hand after deploy)",
       removalPolicy: RemovalPolicy.RETAIN,
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
@@ -80,6 +90,9 @@ export class DataStack extends Stack {
           africastalkingUsername: '',
           africastalkingSenderId: '',
           sesFromAddress: '',
+          vapidPublicKey: '',
+          vapidPrivateKey: '',
+          vapidSubject: '',
         }),
         generateStringKey: 'jwtSecret',
         excludePunctuation: true,

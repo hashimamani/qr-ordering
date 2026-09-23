@@ -41,14 +41,31 @@ export async function resolveTableForOrdering(
   };
 }
 
-export async function getWaiterView(restaurantId: string): Promise<WaiterTableSession[]> {
-  return listActiveTableSessionsForRestaurant(restaurantId);
+export async function getWaiterView(
+  restaurantId: string,
+  requestingRole: string,
+  requestingStaffId: string,
+): Promise<WaiterTableSession[]> {
+  return listActiveTableSessionsForRestaurant(
+    restaurantId,
+    requestingRole === 'waiter' ? requestingStaffId : undefined,
+  );
 }
 
-export async function closeSession(restaurantId: string, sessionId: string): Promise<void> {
-  await closeTableSession(restaurantId, sessionId);
-  await broadcastEvent(`restaurant:${restaurantId}:waiter`, {
-    type: 'session_closed',
-    table_session_id: sessionId,
-  });
+export async function closeSession(
+  restaurantId: string,
+  sessionId: string,
+  requestingStaff: { id: string; role: string },
+): Promise<void> {
+  const { previousAssignedWaiterId } = await closeTableSession(restaurantId, sessionId, requestingStaff);
+  // Broadcast directly to the waiter who *was* assigned (captured before
+  // closeTableSession cleared it) -- not via broadcastToTableWaiter, which
+  // would re-read the table's now-NULL assignment and fall back to
+  // notifying every waiter in the restaurant instead.
+  if (previousAssignedWaiterId) {
+    await broadcastEvent(`restaurant:${restaurantId}:waiter:${previousAssignedWaiterId}`, {
+      type: 'session_closed',
+      table_session_id: sessionId,
+    });
+  }
 }

@@ -4,6 +4,7 @@ import type { StaffRole } from '../api/types';
 export interface StaffSession {
   token: string;
   restaurantId: string;
+  staffId: string;
   role: StaffRole;
   name: string;
 }
@@ -19,7 +20,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 function decodeSession(token: string, name: string): StaffSession | null {
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return { token, restaurantId: payload.restaurantId, role: payload.role, name };
+    return { token, restaurantId: payload.restaurantId, staffId: payload.sub, role: payload.role, name };
   } catch {
     return null;
   }

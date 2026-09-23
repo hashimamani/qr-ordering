@@ -4,9 +4,10 @@ import { asyncHandler } from '../lib/asyncHandler';
 import { ValidationError } from '../lib/errors';
 import { requireStaffAuth, requireRole } from '../middleware/staffAuth';
 import { loginStaff } from '../modules/staff/staff.service';
-import { staffLoginSchema } from '../modules/staff/staff.validation';
+import { staffLoginSchema, pushSubscribeSchema } from '../modules/staff/staff.validation';
 import { getQueueForDestination, updateOrderItemStatus } from '../modules/orderItems/orderItems.service';
 import { getWaiterView, closeSession } from '../modules/tables/tables.service';
+import { upsertPushSubscription } from '../modules/push/push.repository';
 
 export const staffRoutes = Router();
 
@@ -51,8 +52,34 @@ staffRoutes.get(
   requireStaffAuth,
   requireRole('admin', 'waiter'),
   asyncHandler(async (req, res) => {
-    const sessions = await getWaiterView(req.staff!.restaurantId);
+    const sessions = await getWaiterView(req.staff!.restaurantId, req.staff!.role, req.staff!.sub);
     res.json({ table_sessions: sessions });
+  }),
+);
+
+staffRoutes.get(
+  '/staff/push/vapid-public-key',
+  requireStaffAuth,
+  asyncHandler(async (_req, res) => {
+    res.json({ publicKey: process.env.VAPID_PUBLIC_KEY ?? '' });
+  }),
+);
+
+staffRoutes.post(
+  '/staff/push/subscribe',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    const parsed = pushSubscribeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid push subscription payload', parsed.error.flatten());
+    }
+    await upsertPushSubscription(req.staff!.sub, {
+      endpoint: parsed.data.endpoint,
+      p256dh: parsed.data.keys.p256dh,
+      auth: parsed.data.keys.auth,
+    });
+    res.status(204).send();
   }),
 );
 
@@ -79,7 +106,7 @@ staffRoutes.patch(
   requireStaffAuth,
   requireRole('admin', 'waiter'),
   asyncHandler(async (req, res) => {
-    await closeSession(req.staff!.restaurantId, req.params.id);
+    await closeSession(req.staff!.restaurantId, req.params.id, { id: req.staff!.sub, role: req.staff!.role });
     res.status(204).send();
   }),
 );

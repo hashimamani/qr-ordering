@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
-import { NotFoundError } from '../../lib/errors';
+import { NotFoundError, ValidationError } from '../../lib/errors';
 
 export async function insertRestaurantWithAdmin(input: {
   restaurantName: string;
@@ -192,6 +192,12 @@ export interface TableRow {
   restaurant_id: string;
   table_number: string;
   qr_token: string;
+  assigned_waiter_id: string | null;
+  assigned_at: string | null;
+}
+
+export interface TableWithWaiter extends TableRow {
+  assigned_waiter_name: string | null;
 }
 
 export async function insertTable(
@@ -205,10 +211,62 @@ export async function insertTable(
   return result.rows[0];
 }
 
-export async function listTablesForRestaurant(restaurantId: string): Promise<TableRow[]> {
-  const result = await query<TableRow>(
-    'SELECT * FROM "table" WHERE restaurant_id = $1 ORDER BY table_number',
+export async function listTablesForRestaurant(restaurantId: string): Promise<TableWithWaiter[]> {
+  const result = await query<TableWithWaiter>(
+    `SELECT t.*, s.name AS assigned_waiter_name
+     FROM "table" t
+     LEFT JOIN staff_user s ON s.id = t.assigned_waiter_id
+     WHERE t.restaurant_id = $1
+     ORDER BY t.table_number`,
     [restaurantId],
   );
   return result.rows;
+}
+
+/**
+ * The admin-driven exception path, not the normal way tables get assigned
+ * (that's round-robin auto-assignment on first order/call-waiter, see
+ * tables.repository.ts's assignNextWaiterRoundRobin). This exists for the
+ * emergency handoff -- a waiter goes home sick mid-shift and their active
+ * tables need to move to someone else -- so it deliberately has no
+ * active-session guard; blocking it while the session is active would
+ * block the one scenario it's for. Takes a real waiterId, not nullable:
+ * clearing an assignment happens automatically when the session closes
+ * (closeTableSession), never as a manual admin action.
+ */
+export async function assignWaiterToTable(
+  restaurantId: string,
+  tableId: string,
+  waiterId: string,
+): Promise<TableRow> {
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query<{ id: string }>(
+      'SELECT id FROM "table" WHERE id = $1 AND restaurant_id = $2 FOR UPDATE',
+      [tableId, restaurantId],
+    );
+    if (!current.rows[0]) throw new NotFoundError('Table not found');
+
+    const waiter = await client.query(
+      `SELECT 1 FROM staff_user WHERE id = $1 AND restaurant_id = $2 AND role = 'waiter'`,
+      [waiterId, restaurantId],
+    );
+    if ((waiter.rowCount ?? 0) === 0) {
+      throw new ValidationError('assigned_waiter_id must be an existing waiter in this restaurant');
+    }
+
+    const updated = await client.query<TableRow>(
+      'UPDATE "table" SET assigned_waiter_id = $1, assigned_at = now() WHERE id = $2 RETURNING *',
+      [waiterId, tableId],
+    );
+    await client.query('COMMIT');
+    return updated.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

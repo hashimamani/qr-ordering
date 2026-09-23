@@ -199,9 +199,11 @@ the right transport based on whether it's running in Lambda
 (`AWS_LAMBDA_FUNCTION_NAME` is set) or locally.
 
 Rooms:
-- `restaurant:{id}:kitchen`, `restaurant:{id}:bar`, `restaurant:{id}:waiter`
-  — staff dashboards join these; joining requires a `token` field (the
-  staff JWT) matching that `restaurant_id` and role (or `admin`)
+- `restaurant:{id}:kitchen`, `restaurant:{id}:bar` — staff dashboards join
+  these; joining requires a `token` field (the staff JWT) matching that
+  `restaurant_id` and role (or `admin`)
+- `restaurant:{id}:waiter:{staffId}` — each waiter's own personal room, not
+  a shared restaurant-wide one; see "Waiter table assignment" below for why
 - `order:{public_token}` — no auth needed to join, same bearer-token
   threat model as the HTTP tracking endpoint
 
@@ -296,6 +298,61 @@ only way — fine for a single super-admin), no restaurant
 suspend/edit/delete from the platform-admin UI, no password reset for
 either identity type.
 
+## Waiter table assignment
+
+Each table has an `assigned_waiter_id` (nullable FK to `staff_user`,
+`migrations/…_add-waiter-table-assignment.js`). A waiter only ever sees
+and acts on their own tables, plus any still-unassigned ones — enforced
+server-side (`GET /staff/tables`, `PATCH /staff/table-sessions/:id/close`
+in `tables.repository.ts`/`tables.service.ts`), not just hidden in the UI.
+
+**Assignment is automatic, not a manual claim.** The first order or
+"Call waiter" press at an unassigned table round-robins it to whichever
+`waiter` in the restaurant has gone longest without holding a table
+(`assignNextWaiterRoundRobin`, `tables.repository.ts`) — no self-service
+claiming. Closing a table's session releases the assignment automatically
+(back to unassigned, ready for round robin next time); waiters never
+self-release mid-session.
+
+**Admin exists for exactly one case: the emergency handoff** — a waiter
+goes home sick or leaves mid-shift and their *active* tables need to move
+to someone else. `PATCH /admin/tables/:id` (`assignWaiterToTable`) has
+deliberately no "blocked while active" guard, since blocking it would
+block the one scenario it exists for. This is the exception, not the
+normal path — the admin Tables tab frames it that way, not as routine
+table management.
+
+**Notifications**: a waiter gets a WebSocket push to their own personal
+room (`restaurant:{id}:waiter:{staffId}`, see "Real-time layer" above)
+plus a browser push notification (`src/realtime/webPush.ts`, the
+`web-push` package + VAPID keys) for the two "go check on this" moments —
+a new order at their table, or a "Call waiter" press
+(`POST /track/:token/call-waiter`, rate-limited to 3/minute/IP). Push was
+chosen over SMS deliberately: the live WebSocket view can go stale
+without a manual refresh, and a phone-buzz nudge catches that case
+without per-message cost or the annoyance SMS would add at volume.
+Routine status updates (item ready, session closed) stay WebSocket-only —
+push is reserved for the moments that need a waiter's attention *now*.
+
+Deliberately **not** built on the customer `NotificationProvider`/
+`NotificationQueue`/`notification_log` pipeline — that's shaped around a
+`NOT NULL` FK to a real order and Postgres ENUM channel/trigger types,
+neither of which fits a call-waiter event (no order exists yet) without
+invasive schema changes. Staff push instead follows `broadcastEvent()`'s
+pattern: best-effort, inline, try/catch, never blocks the request. A
+push subscription that 404s/410s (uninstalled, permission revoked) gets
+pruned on the spot, mirroring `dynamoBroadcaster.ts`'s identical handling
+of stale WebSocket connections.
+
+**Generating VAPID keys** (once per environment):
+```bash
+node -e "console.log(require('web-push').generateVAPIDKeys())"
+```
+Set locally via `.env`'s `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/
+`VAPID_SUBJECT`; in production, into the `AppSecret` alongside everything
+else (see "Deploying for real" — and its warning about `data-stack.ts`
+template changes wiping this secret's other fields).
+
 ## Local setup
 
 ```bash
@@ -327,10 +384,17 @@ npx cdk deploy --all
 ```
 
 After deploying:
-1. Populate the platform-admin-JWT-secret + AT/SES fields CDK leaves as
-   empty placeholders in the `AppSecret` (see its `CfnOutput` for the
-   ARN) — CDK creates secrets, it never invents real credential values:
-   `aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"jwtSecret":"<keep the auto-generated one>","platformAdminJwtSecret":"<a separate random value>","africastalkingApiKey":"...","africastalkingUsername":"...","africastalkingSenderId":"","sesFromAddress":""}'`
+1. Populate the platform-admin-JWT-secret + VAPID + AT/SES fields CDK
+   leaves as empty placeholders in the `AppSecret` (see its `CfnOutput`
+   for the ARN) — CDK creates secrets, it never invents real credential
+   values:
+   `aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"jwtSecret":"<keep the auto-generated one>","platformAdminJwtSecret":"<a separate random value>","africastalkingApiKey":"...","africastalkingUsername":"...","africastalkingSenderId":"","sesFromAddress":"","vapidPublicKey":"...","vapidPrivateKey":"...","vapidSubject":"mailto:..."}'`
+   **Always include every existing field in this call, not just the one
+   you're changing** — see the warning comment in `data-stack.ts`: a
+   template change to `secretStringTemplate` makes CloudFormation
+   regenerate the whole secret on the next deploy that touches
+   `QrOrderingData`, silently wiping any field not in the new template's
+   default (this broke live SMS once already, see git history).
 2. Invoke the migration Lambda once, then the seed Lambda (see
    `QrOrderingMigration`'s `CfnOutput`s for both function names):
    `aws lambda invoke --function-name <name> --payload '{}' out.json`. To
@@ -487,6 +551,15 @@ calling v1 load-tested, per the original build order's own framing.
 
 ## Known gaps to close before this counts as "production"
 
+- `useRealtime.ts`'s WebSocket client has no resync-on-reconnect — a
+  dropped-then-restored connection picks up new events fine but doesn't
+  re-fetch state missed while disconnected, so a dashboard can go stale
+  until a manual refresh. Web push (see "Waiter table assignment") is a
+  workaround for the waiter case specifically, not a fix for this root
+  cause, which affects kitchen/bar/waiter dashboards alike.
+- No UI for a waiter to see their own push-subscription status (enabled
+  on this device vs. not) — `usePushSubscription`'s state is local to
+  the current page load, not persisted/reflected on return visits.
 - `npm audit` flags dev-only transitive vulnerabilities (vitest's
   `esbuild` dev server, `node-pg-migrate`'s `glob` CLI, `africastalking`'s
   `joi`) — none reachable at runtime, but revisit before this matters

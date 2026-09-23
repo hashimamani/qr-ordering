@@ -1,4 +1,9 @@
-import { findRestaurantBySlug, findTableByQrToken, findOrCreateActiveSession } from '../tables/tables.repository';
+import {
+  findRestaurantBySlug,
+  findTableByQrToken,
+  findOrCreateActiveSession,
+  assignNextWaiterRoundRobin,
+} from '../tables/tables.repository';
 import { findMenuItemsByIds } from '../menu/menu.repository';
 import { insertOrder, type CreateOrderItemInput } from './orders.repository';
 import { generateToken } from '../../lib/token';
@@ -7,6 +12,8 @@ import { ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { broadcastEvent } from '../../realtime/broadcaster';
+import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
+import { sendPushToStaff } from '../../realtime/webPush';
 import { logger } from '../../lib/logger';
 
 export interface PlaceOrderResult {
@@ -80,11 +87,22 @@ export async function placeOrder(
       order_public_token: order.public_token,
     });
   }
-  await broadcastEvent(`restaurant:${restaurant.id}:waiter`, {
+
+  // The first order at a still-unassigned table claims a waiter via round
+  // robin -- a no-op if it's already assigned (returning shift, or a
+  // second order at the same table).
+  const assignedWaiterId = await assignNextWaiterRoundRobin(restaurant.id, table.id);
+  await broadcastToTableWaiter(restaurant.id, table.id, {
     type: 'order_placed',
     table_number: table.table_number,
     order_public_token: order.public_token,
   });
+  if (assignedWaiterId) {
+    await sendPushToStaff(assignedWaiterId, {
+      title: `Table ${table.table_number}`,
+      body: 'New order placed',
+    });
+  }
 
   return {
     public_token: order.public_token,

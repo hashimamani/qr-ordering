@@ -6,6 +6,9 @@ import { resolveTableForOrdering } from '../modules/tables/tables.service';
 import { placeOrder } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
 import { findOrderByPublicToken } from '../modules/tracking/tracking.repository';
+import { findTableContextByPublicToken, assignNextWaiterRoundRobin } from '../modules/tables/tables.repository';
+import { broadcastToTableWaiter } from '../realtime/waiterBroadcast';
+import { sendPushToStaff } from '../realtime/webPush';
 
 export const customerRoutes = Router();
 
@@ -37,5 +40,30 @@ customerRoutes.get(
   asyncHandler(async (req, res) => {
     const order = await findOrderByPublicToken(req.params.publicToken);
     res.json(order);
+  }),
+);
+
+customerRoutes.post(
+  '/track/:publicToken/call-waiter',
+  fixedWindowRateLimit({ windowMs: 60_000, max: 3 }),
+  asyncHandler(async (req, res) => {
+    const context = await findTableContextByPublicToken(req.params.publicToken);
+    // A call-waiter press claims a still-unassigned table too, same as a
+    // first order -- either can be the moment a table gets a waiter.
+    let assignedWaiterId = context.assigned_waiter_id;
+    if (!assignedWaiterId) {
+      assignedWaiterId = await assignNextWaiterRoundRobin(context.restaurant_id, context.table_id);
+    }
+    await broadcastToTableWaiter(context.restaurant_id, context.table_id, {
+      type: 'call_waiter',
+      table_number: context.table_number,
+    });
+    if (assignedWaiterId) {
+      await sendPushToStaff(assignedWaiterId, {
+        title: `Table ${context.table_number}`,
+        body: 'Needs you',
+      });
+    }
+    res.status(204).send();
   }),
 );

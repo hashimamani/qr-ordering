@@ -40,6 +40,7 @@ export async function listOrderItemsByDestination(
 export interface TransitionResult {
   orderId: string;
   orderPublicToken: string;
+  tableId: string;
   tableNumber: string;
   destination: Destination;
   newStatus: OrderItemStatus;
@@ -67,9 +68,10 @@ export async function transitionOrderItemStatus(
       destination: Destination;
       restaurant_id: string;
       public_token: string;
+      table_id: string;
       table_number: string;
     }>(
-      `SELECT oi.id, oi.status, oi.order_id, oi.destination, o.restaurant_id, o.public_token, t.table_number
+      `SELECT oi.id, oi.status, oi.order_id, oi.destination, o.restaurant_id, o.public_token, t.id AS table_id, t.table_number
        FROM order_item oi
        JOIN "order" o ON o.id = oi.order_id
        JOIN table_session ts ON ts.id = o.table_session_id
@@ -103,6 +105,7 @@ export async function transitionOrderItemStatus(
     return {
       orderId: item.order_id,
       orderPublicToken: item.public_token,
+      tableId: item.table_id,
       tableNumber: item.table_number,
       destination: item.destination,
       newStatus,

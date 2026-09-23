@@ -10,6 +10,7 @@ import { findOrderByPublicToken } from '../tracking/tracking.repository';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { trackingUrlFor } from '../../lib/urls';
 import { broadcastEvent } from '../../realtime/broadcaster';
+import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { logger } from '../../lib/logger';
 
 export async function getQueueForDestination(
@@ -39,7 +40,7 @@ export async function updateOrderItemStatus(
     table_number: result.tableNumber,
     status: result.newStatus,
   });
-  await broadcastEvent(`restaurant:${restaurantId}:waiter`, {
+  await broadcastToTableWaiter(restaurantId, result.tableId, {
     type: 'item_status_changed',
     order_item_id: orderItemId,
     order_public_token: result.orderPublicToken,

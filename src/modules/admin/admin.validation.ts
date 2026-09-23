@@ -33,3 +33,7 @@ export const updateMenuItemSchema = createMenuItemSchema.partial();
 export const createTableSchema = z.object({
   table_number: z.string().min(1).max(50),
 });
+
+export const assignWaiterSchema = z.object({
+  assigned_waiter_id: z.string().uuid(),
+});
