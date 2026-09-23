@@ -1,9 +1,8 @@
-import { Duration, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as eventsources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -11,6 +10,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type { Construct } from 'constructs';
 import * as path from 'path';
+import { NODEJS_RUNTIME } from './runtime';
 
 export interface NotificationWorkerStackProps extends StackProps {
   vpc: ec2.Vpc;
@@ -35,18 +35,23 @@ export class NotificationWorkerStack extends Stack {
   constructor(scope: Construct, id: string, props: NotificationWorkerStackProps) {
     super(scope, id, props);
 
+    const logGroup = new logs.LogGroup(this, 'NotificationWorkerFunctionLogGroup', {
+      retention: logs.RetentionDays.TWO_WEEKS,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
     const fn = new nodejs.NodejsFunction(this, 'NotificationWorkerFunction', {
       entry: path.join(__dirname, '../../src/lambda-notification-worker.ts'),
       projectRoot: path.join(__dirname, '../..'),
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: NODEJS_RUNTIME,
       memorySize: 256,
       timeout: Duration.seconds(20),
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
-      logRetention: logs.RetentionDays.TWO_WEEKS,
+      logGroup,
       environment: {
         DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
         APP_SECRET_ARN: props.appSecret.secretArn,

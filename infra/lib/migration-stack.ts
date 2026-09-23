@@ -1,12 +1,12 @@
-import { Duration, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
 import * as path from 'path';
+import { NODEJS_RUNTIME } from './runtime';
 
 export interface MigrationStackProps extends StackProps {
   vpc: ec2.Vpc;
@@ -40,19 +40,22 @@ export class MigrationStack extends Stack {
       projectRoot: path.join(__dirname, '../..'),
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: NODEJS_RUNTIME,
       memorySize: 256,
       timeout: Duration.minutes(2),
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
-      logRetention: logs.RetentionDays.ONE_MONTH,
     };
 
     const migrateFn = new nodejs.NodejsFunction(this, 'MigrationFunction', {
       ...commonProps,
       entry: path.join(__dirname, '../../src/lambda-migrate.ts'),
       environment: commonEnv,
+      logGroup: new logs.LogGroup(this, 'MigrationFunctionLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       bundling: {
         // node-pg-migrate loads migration files from disk by directory
         // glob at runtime (not a static import esbuild would follow), so
@@ -73,6 +76,10 @@ export class MigrationStack extends Stack {
       ...commonProps,
       entry: path.join(__dirname, '../../src/lambda-seed.ts'),
       environment: commonEnv,
+      logGroup: new logs.LogGroup(this, 'SeedFunctionLogGroup', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
 
     props.dbInstance.secret!.grantRead(migrateFn);

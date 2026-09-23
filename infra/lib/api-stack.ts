@@ -4,14 +4,14 @@ import * as rds from 'aws-cdk-lib/aws-rds';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import { NODEJS_RUNTIME } from './runtime';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import { CfnOutput } from 'aws-cdk-lib';
+import { CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -45,18 +45,29 @@ export class ApiStack extends Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
+    // logGroup, not the deprecated logRetention prop -- logRetention
+    // provisions its own CDK-managed custom-resource Lambda to apply the
+    // retention policy, and that helper Lambda runs on whatever Node
+    // runtime is baked into this CDK version (nodejs20.x) regardless of
+    // the `runtime` set below, silently adding another deprecated-runtime
+    // function to the account.
+    const logGroup = new logs.LogGroup(this, 'ApiFunctionLogGroup', {
+      retention: logs.RetentionDays.TWO_WEEKS,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
     const fn = new nodejs.NodejsFunction(this, 'ApiFunction', {
       entry: path.join(__dirname, '../../src/lambda.ts'),
       projectRoot: path.join(__dirname, '../..'),
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: NODEJS_RUNTIME,
       memorySize: 512,
       timeout: Duration.seconds(15),
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
-      logRetention: logs.RetentionDays.TWO_WEEKS,
+      logGroup,
       bundling: {
         // src/app.ts serves public/ as static files -- esbuild only
         // follows static imports, so the non-imported public/ directory

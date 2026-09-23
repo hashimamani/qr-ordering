@@ -1,13 +1,13 @@
-import { Duration, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Stack, type StackProps, CfnOutput } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
 import * as path from 'path';
+import { NODEJS_RUNTIME } from './runtime';
 
 export interface WebSocketStackProps extends StackProps {
   connectionsTable: dynamodb.Table;
@@ -28,18 +28,19 @@ export class WebSocketStack extends Stack {
     super(scope, id, props);
 
     const commonProps = {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: NODEJS_RUNTIME,
       memorySize: 256,
       timeout: Duration.seconds(10),
-      logRetention: logs.RetentionDays.TWO_WEEKS,
       projectRoot: path.join(__dirname, '../..'),
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
     };
+    const logGroupProps = { retention: logs.RetentionDays.TWO_WEEKS, removalPolicy: RemovalPolicy.DESTROY };
 
     const connectFn = new nodejs.NodejsFunction(this, 'ConnectFunction', {
       ...commonProps,
       entry: path.join(__dirname, '../../src/lambda-websocket.ts'),
       handler: 'connectHandler',
+      logGroup: new logs.LogGroup(this, 'ConnectFunctionLogGroup', logGroupProps),
     });
 
     const disconnectFn = new nodejs.NodejsFunction(this, 'DisconnectFunction', {
@@ -47,6 +48,7 @@ export class WebSocketStack extends Stack {
       entry: path.join(__dirname, '../../src/lambda-websocket.ts'),
       handler: 'disconnectHandler',
       environment: { WS_CONNECTIONS_TABLE: props.connectionsTable.tableName },
+      logGroup: new logs.LogGroup(this, 'DisconnectFunctionLogGroup', logGroupProps),
     });
 
     const defaultFn = new nodejs.NodejsFunction(this, 'DefaultFunction', {
@@ -57,6 +59,7 @@ export class WebSocketStack extends Stack {
         WS_CONNECTIONS_TABLE: props.connectionsTable.tableName,
         APP_SECRET_ARN: props.appSecret.secretArn,
       },
+      logGroup: new logs.LogGroup(this, 'DefaultFunctionLogGroup', logGroupProps),
     });
 
     props.connectionsTable.grantWriteData(disconnectFn);
