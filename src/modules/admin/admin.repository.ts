@@ -35,6 +35,25 @@ export async function insertRestaurantWithAdmin(input: {
   }
 }
 
+export interface RestaurantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+// The one deliberately cross-tenant query in this codebase -- no
+// restaurant_id filter, by design. Only reachable via
+// requirePlatformAdminAuth (src/middleware/platformAdminAuth.ts), never
+// via requireStaffAuth, so it doesn't weaken the tenant-isolation
+// guarantee every staff/admin route otherwise depends on.
+export async function listAllRestaurants(): Promise<RestaurantSummary[]> {
+  const result = await query<RestaurantSummary>(
+    'SELECT id, name, slug, created_at FROM restaurant ORDER BY created_at DESC',
+  );
+  return result.rows;
+}
+
 export interface MenuCategoryRow {
   id: string;
   restaurant_id: string;

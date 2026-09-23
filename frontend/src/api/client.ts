@@ -12,12 +12,19 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   auth?: boolean;
+  // Explicit bearer token, for callers that aren't the staff session
+  // (e.g. the platform-admin area) -- takes precedence over `auth`'s
+  // staffToken lookup so both token types can share this one fetch
+  // wrapper without it needing to know which "kind" of session it is.
+  authToken?: string;
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (options.auth) {
+  if (options.authToken) {
+    headers['Authorization'] = `Bearer ${options.authToken}`;
+  } else if (options.auth) {
     const token = localStorage.getItem('staffToken');
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }

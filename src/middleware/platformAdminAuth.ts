@@ -1,21 +1,34 @@
 import type { NextFunction, Request, Response } from 'express';
+import { verifyPlatformAdminToken, type PlatformAdminTokenPayload } from '../lib/jwt';
 import { UnauthorizedError } from '../lib/errors';
 
-/**
- * Gates restaurant-signup/bootstrap: creating a brand-new tenant can't be
- * gated by a staff JWT (no restaurant/admin exists yet to issue one from),
- * so it's gated by a shared platform-operator secret instead. This is a
- * deliberate addition beyond the original API spec, needed to make
- * onboarding actually reachable end-to-end -- flagged here and in the
- * README rather than added silently.
- */
-export function requirePlatformAdminKey(req: Request, _res: Response, next: NextFunction): void {
-  const expected = process.env.PLATFORM_ADMIN_KEY;
-  if (!expected) {
-    throw new Error('PLATFORM_ADMIN_KEY is not set');
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      platformAdmin?: PlatformAdminTokenPayload;
+    }
   }
-  if (req.header('x-platform-admin-key') !== expected) {
-    throw new UnauthorizedError('Invalid platform admin key');
+}
+
+/**
+ * Gates restaurant onboarding and other platform-level routes. Separate
+ * from staff auth entirely -- a platform admin is not scoped to any
+ * restaurant_id, so this can never be satisfied by a staff JWT, and a
+ * staff JWT's routes can never be satisfied by this. Replaces the earlier
+ * shared-secret (`x-platform-admin-key`) gate with a real identity: only
+ * accounts that exist in the platform_admin table can onboard tenants.
+ */
+export function requirePlatformAdminAuth(req: Request, _res: Response, next: NextFunction): void {
+  const header = req.header('authorization');
+  if (!header?.startsWith('Bearer ')) {
+    throw new UnauthorizedError('Missing bearer token');
+  }
+  const token = header.slice('Bearer '.length);
+  try {
+    req.platformAdmin = verifyPlatformAdminToken(token);
+  } catch {
+    throw new UnauthorizedError('Invalid or expired token');
   }
   next();
 }

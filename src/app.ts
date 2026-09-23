@@ -6,6 +6,7 @@ import { AppError, ValidationError } from './lib/errors';
 import { customerRoutes } from './routes/customerRoutes';
 import { staffRoutes } from './routes/staffRoutes';
 import { adminRoutes } from './routes/adminRoutes';
+import { platformAdminRoutes } from './routes/platformAdminRoutes';
 
 /**
  * Builds the Express app with no process-level side effects (no listen(),
@@ -43,6 +44,7 @@ export function buildApp() {
   app.use(customerRoutes);
   app.use(staffRoutes);
   app.use(adminRoutes);
+  app.use(platformAdminRoutes);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: { code: 'not_found', message: 'Route not found' } });

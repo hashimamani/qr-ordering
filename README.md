@@ -122,11 +122,13 @@ values are still live.
    it from. Added `MenuItem.destination` and copy it onto each
    `OrderItem` at order-creation time, so a later menu edit can't silently
    reroute an order already in the kitchen queue.
-2. **`POST /admin/restaurants/signup`** — the spec's admin routes are all
-   gated by a staff JWT, but nothing creates the *first* restaurant +
-   admin user for a brand-new tenant (chicken-and-egg). Added this one
-   bootstrap route, gated by a shared `PLATFORM_ADMIN_KEY` header instead
-   of a staff JWT.
+2. **A second, platform-level admin tier** (`platform_admin` table,
+   `/platform-admin/*` routes) — the spec's admin routes are all gated by
+   a staff JWT scoped to one restaurant, but nothing creates the *first*
+   restaurant + admin user for a brand-new tenant (chicken-and-egg), and
+   "who's allowed to onboard a new restaurant at all" is a decision above
+   any single restaurant. Added a wholly separate identity for this —
+   see "Platform admin (tenant onboarding)" below.
 3. **A migration-runner Lambda** (`src/lambda-migrate.ts`,
    `infra/lib/migration-stack.ts`) — RDS sits in a private subnet with no
    bastion host, so CI/CD needs *some* way to run `node-pg-migrate`
@@ -228,6 +230,9 @@ Routes:
   server-generated PNG for new tables, client-side `qrcode` render for
   existing ones), and staff (create + list; no edit/delete, matching what
   the API supports)
+- `/platform-admin/login`, `/platform-admin` — separate super-admin area
+  for onboarding new restaurants, see "Platform admin (tenant onboarding)"
+  below; entirely independent login/session from the staff area above
 
 Auth: the staff JWT issued by `POST /auth/login` is decoded client-side
 (`AuthContext.tsx`) purely to drive which nav links and routes render —
@@ -242,6 +247,54 @@ Local dev: `npm install && npm run dev` inside `frontend/` (port 5173,
 `.env.local` points it at the local API on 3010). Build for deploy:
 `npm run build` (reads `.env.production`, gitignored — holds the real
 deployed API/WS URLs, not secrets) emits static assets to `frontend/dist`.
+
+## Platform admin (tenant onboarding)
+
+Two-tier admin model:
+- **Restaurant admin** (`staff_user.role = 'admin'`, existing) — scoped to
+  one `restaurant_id`, manages that restaurant's own menu/tables/staff via
+  `/admin`. This is "not every user" — a restaurant's admin can't onboard
+  *other* restaurants, and can't even tell they exist.
+- **Platform admin** (`platform_admin` table, new) — not scoped to any
+  restaurant at all, the only identity that can onboard a new tenant.
+  Deliberately a wholly separate table/JWT/frontend area rather than a
+  role flag on `staff_user` — that table's queries all assume
+  `restaurant_id` is mandatory and non-null (the tenant-isolation
+  guarantee this whole app depends on), so a "no restaurant" case living
+  inside it is exactly the kind of thing one missed `WHERE` clause could
+  turn into a cross-tenant leak. Structurally separate means that can't
+  happen.
+
+**Auth**: `platform_admin` JWTs (`src/lib/jwt.ts`'s
+`signPlatformAdminToken`/`verifyPlatformAdminToken`) are signed with a
+*different* secret (`PLATFORM_ADMIN_JWT_SECRET`) than staff JWTs
+(`JWT_SECRET`) — not just a different claim shape — so a leaked staff
+secret can never forge a platform-admin token, and vice versa. Verified:
+a staff token gets a 401 against `/platform-admin/*` and a platform-admin
+token gets a 401 against `/admin/*`.
+
+**Routes** (`src/routes/platformAdminRoutes.ts`):
+- `POST /platform-admin/login` — public
+- `GET /platform-admin/restaurants` — list all tenants (the one
+  deliberately cross-tenant query in the codebase, gated exclusively by
+  `requirePlatformAdminAuth`)
+- `POST /platform-admin/restaurants` — onboard a new one (moved off the
+  old `/admin/restaurants/signup` + shared-key gate this replaces)
+
+**Creating the first platform admin** — never auto-seeded with a
+guessable password (unlike the demo staff logins), since this is a real
+credential:
+- Local: `npm run create-platform-admin -- --name="..." --email="..." --password="..."`
+- Deployed (no bastion host, same reasoning as `lambda-migrate.ts`'s
+  diagnose mode): invoke the seed Lambda with
+  `{"createPlatformAdmin": {"name": "...", "email": "...", "password": "..."}}`
+  instead of the usual `{}` demo-seed payload.
+
+**Out of scope for now** (flagged, not forgotten): no UI for creating
+*additional* platform admins (the CLI script/Lambda payload above is the
+only way — fine for a single super-admin), no restaurant
+suspend/edit/delete from the platform-admin UI, no password reset for
+either identity type.
 
 ## Local setup
 
@@ -274,13 +327,17 @@ npx cdk deploy --all
 ```
 
 After deploying:
-1. Populate the two AT/SES + platform-admin-key fields CDK leaves as
+1. Populate the platform-admin-JWT-secret + AT/SES fields CDK leaves as
    empty placeholders in the `AppSecret` (see its `CfnOutput` for the
    ARN) — CDK creates secrets, it never invents real credential values:
-   `aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"jwtSecret":"<keep the auto-generated one>","platformAdminKey":"...","africastalkingApiKey":"...","africastalkingUsername":"...","africastalkingSenderId":"","sesFromAddress":""}'`
+   `aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"jwtSecret":"<keep the auto-generated one>","platformAdminJwtSecret":"<a separate random value>","africastalkingApiKey":"...","africastalkingUsername":"...","africastalkingSenderId":"","sesFromAddress":""}'`
 2. Invoke the migration Lambda once, then the seed Lambda (see
    `QrOrderingMigration`'s `CfnOutput`s for both function names):
-   `aws lambda invoke --function-name <name> --payload '{}' out.json`
+   `aws lambda invoke --function-name <name> --payload '{}' out.json`. To
+   create the platform admin (see "Platform admin (tenant onboarding)"
+   above), invoke the seed Lambda again with
+   `{"createPlatformAdmin": {"name": "...", "email": "...", "password": "..."}}`
+   instead of `{}`.
 3. Set `FRONTEND_URL` in the shell CDK runs in to the real
    `QrOrderingFrontend.FrontendUrl` output (its CloudFront domain) and
    redeploy `QrOrderingApi` — this feeds both `corsOrigins` (so the API

@@ -100,3 +100,19 @@ export interface CreatedTableWithQr {
   ordering_url: string;
   qr_code_png_base64: string;
 }
+
+export interface PlatformAdminLoginResponse {
+  token: string;
+  name: string;
+}
+
+export interface RestaurantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface RestaurantSignupResponse {
+  restaurant_id: string;
+}

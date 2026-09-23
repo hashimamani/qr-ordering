@@ -13,7 +13,7 @@ interface DbSecret {
 
 interface AppSecret {
   jwtSecret: string;
-  platformAdminKey: string;
+  platformAdminJwtSecret: string;
   africastalkingApiKey?: string;
   africastalkingUsername?: string;
   africastalkingSenderId?: string;
@@ -67,7 +67,7 @@ export async function loadSecretsIntoEnv(): Promise<void> {
       client.send(new GetSecretValueCommand({ SecretId: process.env.APP_SECRET_ARN })).then((result) => {
         const appSecret = JSON.parse(result.SecretString!) as AppSecret;
         process.env.JWT_SECRET = appSecret.jwtSecret;
-        process.env.PLATFORM_ADMIN_KEY = appSecret.platformAdminKey;
+        process.env.PLATFORM_ADMIN_JWT_SECRET = appSecret.platformAdminJwtSecret;
         process.env.AFRICASTALKING_API_KEY = appSecret.africastalkingApiKey ?? '';
         process.env.AFRICASTALKING_USERNAME = appSecret.africastalkingUsername ?? '';
         process.env.AFRICASTALKING_SENDER_ID = appSecret.africastalkingSenderId ?? '';

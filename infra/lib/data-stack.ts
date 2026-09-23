@@ -59,19 +59,23 @@ export class DataStack extends Stack {
 
     // generateSecretString only auto-fills one key (jwtSecret) -- CDK
     // creates the secret, it never invents values for the rest.
-    // platformAdminKey and the Africa's Talking/SES credentials ship as
-    // empty placeholders and must be set by hand after deploy (same
-    // pattern as the AfricasTalkingSecret/TwilioSecret split in the
+    // platformAdminJwtSecret and the Africa's Talking/SES credentials
+    // ship as empty placeholders and must be set by hand after deploy
+    // (same pattern as the AfricasTalkingSecret/TwilioSecret split in the
     // sms-notify project's DataStack), e.g.:
     //   aws secretsmanager put-secret-value --secret-id <arn> \
-    //     --secret-string '{"jwtSecret":"...","platformAdminKey":"...", ...}'
+    //     --secret-string '{"jwtSecret":"...","platformAdminJwtSecret":"...", ...}'
+    // platformAdminJwtSecret is deliberately separate from jwtSecret --
+    // it signs the platform_admin (super-admin/onboarding) JWT, a
+    // distinct identity from staff JWTs, so a leaked staff secret can
+    // never forge a platform-admin token.
     this.appSecret = new secretsmanager.Secret(this, 'AppSecret', {
       description:
-        "JWT signing secret (auto-generated) plus platform admin key and Africa's Talking/SES credentials (set by hand after deploy)",
+        "JWT signing secret (auto-generated) plus the platform-admin JWT secret and Africa's Talking/SES credentials (set by hand after deploy)",
       removalPolicy: RemovalPolicy.RETAIN,
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
-          platformAdminKey: '',
+          platformAdminJwtSecret: '',
           africastalkingApiKey: '',
           africastalkingUsername: '',
           africastalkingSenderId: '',

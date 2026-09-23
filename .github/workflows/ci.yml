@@ -26,12 +26,12 @@ jobs:
     env:
       DATABASE_URL: postgres://qr_ordering:qr_ordering@localhost:5432/qr_ordering
       JWT_SECRET: ci-test-secret
-      PLATFORM_ADMIN_KEY: ci-test-platform-key
+      PLATFORM_ADMIN_JWT_SECRET: ci-test-platform-admin-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run lint

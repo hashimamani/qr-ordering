@@ -2,9 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../lib/asyncHandler';
 import { ValidationError } from '../lib/errors';
 import { requireStaffAuth, requireRole } from '../middleware/staffAuth';
-import { requirePlatformAdminKey } from '../middleware/platformAdminAuth';
 import {
-  restaurantSignupSchema,
   createMenuCategorySchema,
   updateMenuCategorySchema,
   createMenuItemSchema,
@@ -13,7 +11,6 @@ import {
 } from '../modules/admin/admin.validation';
 import { createStaffUserSchema } from '../modules/staff/staff.validation';
 import {
-  signUpRestaurant,
   createMenuItemForRestaurant,
   createTableWithQrCode,
   createStaffUserForRestaurant,
@@ -32,20 +29,17 @@ import { findRestaurantById } from '../modules/tables/tables.repository';
 
 export const adminRoutes = Router();
 
-adminRoutes.post(
-  '/admin/restaurants/signup',
-  requirePlatformAdminKey,
-  asyncHandler(async (req, res) => {
-    const parsed = restaurantSignupSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid signup payload', parsed.error.flatten());
-    }
-    const result = await signUpRestaurant(parsed.data);
-    res.status(201).json(result);
-  }),
-);
-
-adminRoutes.use(requireStaffAuth, requireRole('admin'));
+// Restaurant onboarding lives at /platform-admin/restaurants now (see
+// src/routes/platformAdminRoutes.ts) -- gated by a real platform_admin
+// login instead of a shared secret. Everything below here is scoped to
+// an existing restaurant's own admin.
+//
+// Scoped to the '/admin' prefix explicitly -- a bare `.use(mw)` with no
+// path runs for every request that reaches this router at all (it's
+// mounted at app root), which would 401 requests meant for other
+// routers (e.g. /platform-admin/*) that happen to be mounted after this
+// one, not just this router's own /admin/* routes.
+adminRoutes.use('/admin', requireStaffAuth, requireRole('admin'));
 
 adminRoutes.get(
   '/admin/menu',
