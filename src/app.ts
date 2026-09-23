@@ -20,23 +20,34 @@ export function buildApp() {
 
   // The frontend (React/Vite, S3+CloudFront in production) is a genuinely
   // different origin now -- API Gateway's own corsPreflight config
-  // (api-stack.ts) handles this for the deployed Lambda, adding headers
-  // to every response automatically. That doesn't apply when running
-  // this Express app directly (`npm run dev`), so local dev needs its
-  // own CORS handling -- the Vite dev server and this server run on
-  // different ports.
-  if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    app.use((req: Request, res: Response, next: NextFunction) => {
+  // (api-stack.ts) adds Access-Control-* headers to every response in
+  // production, including ones from this app, so header-setting stays
+  // local-dev-only (Vite and this server run on different ports there,
+  // with no API Gateway in front to add them).
+  //
+  // The OPTIONS short-circuit below runs in BOTH environments, though --
+  // this app is wired to API Gateway via one catch-all `defaultIntegration`
+  // (see api-stack.ts), which forwards every method to this Lambda,
+  // OPTIONS included, instead of letting API Gateway auto-answer
+  // preflight the way corsPreflight normally implies. Without this, an
+  // OPTIONS request for e.g. POST /admin/menu-items falls through to
+  // adminRoutes' auth-gating middleware (no bearer token on a preflight
+  // request) and comes back 401 -- CORS-valid headers on a non-2xx status
+  // still fail the browser's preflight check, breaking every cross-origin
+  // POST/PATCH/DELETE and every request carrying Authorization, discovered
+  // live testing the platform-admin login flow.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
       res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-      if (req.method === 'OPTIONS') {
-        res.sendStatus(204);
-        return;
-      }
-      next();
-    });
-  }
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
 
   app.use(express.json());
   app.use(pinoHttp({ logger }));
