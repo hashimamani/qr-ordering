@@ -21,6 +21,8 @@ export function AdminTablesTab() {
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<CreatedTableWithQr | null>(null);
   const [qrPreviews, setQrPreviews] = useState<Record<string, string>>({});
+  const [zoomTable, setZoomTable] = useState<AdminTable | null>(null);
+  const [zoomQrUrl, setZoomQrUrl] = useState('');
   const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
   const [reassignTarget, setReassignTarget] = useState<AdminTable | null>(null);
   const [reassignChoice, setReassignChoice] = useState('');
@@ -79,6 +81,16 @@ export function AdminTablesTab() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables, restaurantSlug]);
+
+  useEffect(() => {
+    if (!zoomTable || !restaurantSlug) {
+      setZoomQrUrl('');
+      return;
+    }
+    QRCode.toDataURL(orderingUrlFor(restaurantSlug, zoomTable.qr_token), { margin: 1, width: 360 })
+      .then(setZoomQrUrl)
+      .catch(() => {});
+  }, [zoomTable, restaurantSlug]);
 
   async function doRegenerateQr() {
     if (!confirmRegenerate) return;
@@ -166,9 +178,14 @@ export function AdminTablesTab() {
         {tables.map((table) => (
           <div key={table.id} className="card table-card">
             {qrPreviews[table.id] && (
-              <span className="qr-tooltip-wrapper" data-tooltip={restaurantSlug ? orderingUrlFor(restaurantSlug, table.qr_token) : ''}>
+              <button
+                type="button"
+                className="qr-thumb-button"
+                onClick={() => setZoomTable(table)}
+                aria-label={`Show larger QR code for table ${table.table_number}`}
+              >
                 <img className="qr-preview" style={{ width: 72, height: 72 }} src={qrPreviews[table.id]} alt="" />
-              </span>
+              </button>
             )}
             <div className="table-card-body">
               <div className="top-bar">
@@ -202,6 +219,16 @@ export function AdminTablesTab() {
           </div>
         ))}
       </div>
+
+      <Dialog
+        open={!!zoomTable}
+        onClose={() => setZoomTable(null)}
+        title={`Table ${zoomTable?.table_number ?? ''}`}
+      >
+        <div className="qr-zoom-wrap">
+          {zoomQrUrl && <img className="qr-zoom-image" src={zoomQrUrl} alt="Table QR code" />}
+        </div>
+      </Dialog>
 
       <Dialog
         open={!!reassignTarget}
