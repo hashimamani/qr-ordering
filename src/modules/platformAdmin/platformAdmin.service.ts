@@ -1,7 +1,8 @@
 import { hashPassword, verifyPassword } from '../../lib/password';
 import { signPlatformAdminToken } from '../../lib/jwt';
-import { ConflictError, UnauthorizedError } from '../../lib/errors';
+import { ConflictError, ForbiddenError, UnauthorizedError } from '../../lib/errors';
 import { findPlatformAdminByEmail, insertPlatformAdmin } from './platformAdmin.repository';
+import { findStaffUserById, setStaffPasswordHash } from '../staff/staff.repository';
 
 export interface PlatformAdminLoginResult {
   token: string;
@@ -17,6 +18,23 @@ export async function loginPlatformAdmin(email: string, password: string): Promi
   }
   const token = signPlatformAdminToken({ sub: admin.id, type: 'platform_admin' });
   return { token, name: admin.name };
+}
+
+/**
+ * Deliberately scoped to the admin role only -- a restaurant admin
+ * locked out of their own account has no other recovery path (they're
+ * the one who'd normally reset everyone else's password), so platform
+ * admin is the escape hatch for that one case. Not a general "platform
+ * admin can touch any staff account" capability: waiter/kitchen/bar
+ * accounts stay entirely under their own restaurant admin's control.
+ */
+export async function resetRestaurantAdminPassword(staffId: string, newPassword: string): Promise<void> {
+  const staff = await findStaffUserById(staffId);
+  if (!staff || staff.role !== 'admin') {
+    throw new ForbiddenError('Platform admin can only reset a restaurant admin\'s password');
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await setStaffPasswordHash(staffId, passwordHash);
 }
 
 export async function createPlatformAdmin(

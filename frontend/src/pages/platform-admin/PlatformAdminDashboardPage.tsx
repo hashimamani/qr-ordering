@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
-import type { RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
+import type { RestaurantAdmin, RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
 import { usePlatformAdminAuth } from '../../auth/PlatformAdminAuthContext';
 
 const EMPTY_FORM = {
@@ -19,6 +19,11 @@ export function PlatformAdminDashboardPage() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [managingRestaurantId, setManagingRestaurantId] = useState<string | null>(null);
+  const [admins, setAdmins] = useState<RestaurantAdmin[]>([]);
+  const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetDoneId, setResetDoneId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!session) return;
@@ -30,6 +35,44 @@ export function PlatformAdminDashboardPage() {
   useEffect(load, [load]);
 
   if (!session) return null;
+
+  function toggleManage(restaurantId: string) {
+    if (managingRestaurantId === restaurantId) {
+      setManagingRestaurantId(null);
+      setAdmins([]);
+      return;
+    }
+    setManagingRestaurantId(restaurantId);
+    setResetDoneId(null);
+    apiFetch<{ admins: RestaurantAdmin[] }>(`/platform-admin/restaurants/${restaurantId}/admins`, {
+      authToken: session!.token,
+    })
+      .then((data) => setAdmins(data.admins))
+      .catch((err: ApiError) => setError(err.message));
+  }
+
+  async function resetPassword(staffId: string) {
+    const password = resetPasswords[staffId] ?? '';
+    if (password.length < 8) {
+      setError('New password needs 8+ characters.');
+      return;
+    }
+    setResettingId(staffId);
+    setError('');
+    try {
+      await apiFetch(`/platform-admin/staff/${staffId}/password`, {
+        method: 'PATCH',
+        authToken: session!.token,
+        body: { password },
+      });
+      setResetPasswords((prev) => ({ ...prev, [staffId]: '' }));
+      setResetDoneId(staffId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setResettingId(null);
+    }
+  }
 
   async function onboardRestaurant() {
     if (
@@ -132,6 +175,7 @@ export function PlatformAdminDashboardPage() {
               <th>Name</th>
               <th>Slug</th>
               <th>Onboarded</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -140,10 +184,45 @@ export function PlatformAdminDashboardPage() {
                 <td>{r.name}</td>
                 <td>{r.slug}</td>
                 <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                <td>
+                  <button className="secondary" onClick={() => toggleManage(r.id)}>
+                    {managingRestaurantId === r.id ? 'Close' : 'Manage admins'}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {managingRestaurantId && (
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>Reset an admin's password</h3>
+            <p className="sub">
+              Scoped to the admin role only -- for a restaurant admin who's locked out. Everything else about
+              their account stays theirs to manage.
+            </p>
+            {admins.length === 0 && <div className="empty-state">No admin accounts found.</div>}
+            {admins.map((a) => (
+              <div key={a.id} className="item-row">
+                <div>
+                  <div className="item-name">{a.name}</div>
+                  <div className="item-desc">{a.phone_or_email}</div>
+                </div>
+                <div>
+                  <input
+                    type="password"
+                    placeholder="New password (8+ chars)"
+                    value={resetPasswords[a.id] ?? ''}
+                    onChange={(e) => setResetPasswords((prev) => ({ ...prev, [a.id]: e.target.value }))}
+                  />{' '}
+                  <button className="primary" disabled={resettingId === a.id} onClick={() => resetPassword(a.id)}>
+                    {resettingId === a.id ? 'Resetting…' : resetDoneId === a.id ? 'Reset ✓' : 'Reset password'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     </>
   );

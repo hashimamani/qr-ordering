@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
-import { NotFoundError, ValidationError } from '../../lib/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
 
 export async function insertRestaurantWithAdmin(input: {
   restaurantName: string;
@@ -194,6 +194,7 @@ export interface TableRow {
   qr_token: string;
   assigned_waiter_id: string | null;
   assigned_at: string | null;
+  removed_at: string | null;
 }
 
 export interface TableWithWaiter extends TableRow {
@@ -211,16 +212,61 @@ export async function insertTable(
   return result.rows[0];
 }
 
+// Excludes removed tables -- a "deleted" table (removeTable below) is
+// soft-deleted so past orders survive, but it should disappear from the
+// admin's own view same as a real delete would.
 export async function listTablesForRestaurant(restaurantId: string): Promise<TableWithWaiter[]> {
   const result = await query<TableWithWaiter>(
     `SELECT t.*, s.name AS assigned_waiter_name
      FROM "table" t
      LEFT JOIN staff_user s ON s.id = t.assigned_waiter_id
-     WHERE t.restaurant_id = $1
+     WHERE t.restaurant_id = $1 AND t.removed_at IS NULL
      ORDER BY t.table_number`,
     [restaurantId],
   );
   return result.rows;
+}
+
+/**
+ * Shared by regenerateQrToken and removeTable below -- both are
+ * destructive-ish table actions that only make sense once the table is
+ * fully closed out, same "no active/awaiting_payment session" check
+ * already used for listIdleTablesForRestaurant.
+ */
+async function assertTableHasNoActiveSession(tableId: string): Promise<void> {
+  const active = await query(
+    `SELECT 1 FROM table_session WHERE table_id = $1 AND status IN ('active', 'awaiting_payment') LIMIT 1`,
+    [tableId],
+  );
+  if ((active.rowCount ?? 0) > 0) {
+    throw new ConflictError('This table still has an active session -- close it first');
+  }
+}
+
+export async function regenerateQrToken(restaurantId: string, tableId: string, newQrToken: string): Promise<TableRow> {
+  const current = await query<{ id: string }>(
+    'SELECT id FROM "table" WHERE id = $1 AND restaurant_id = $2 AND removed_at IS NULL',
+    [tableId, restaurantId],
+  );
+  if (!current.rows[0]) throw new NotFoundError('Table not found');
+  await assertTableHasNoActiveSession(tableId);
+
+  const result = await query<TableRow>('UPDATE "table" SET qr_token = $1 WHERE id = $2 RETURNING *', [
+    newQrToken,
+    tableId,
+  ]);
+  return result.rows[0];
+}
+
+export async function removeTable(restaurantId: string, tableId: string): Promise<void> {
+  const current = await query<{ id: string }>(
+    'SELECT id FROM "table" WHERE id = $1 AND restaurant_id = $2 AND removed_at IS NULL',
+    [tableId, restaurantId],
+  );
+  if (!current.rows[0]) throw new NotFoundError('Table not found');
+  await assertTableHasNoActiveSession(tableId);
+
+  await query('UPDATE "table" SET removed_at = now() WHERE id = $1', [tableId]);
 }
 
 /**

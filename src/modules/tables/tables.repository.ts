@@ -55,7 +55,7 @@ export async function findTableByQrToken(
   qrToken: string,
 ): Promise<RestaurantTable> {
   const result = await query<RestaurantTable>(
-    'SELECT id, restaurant_id, table_number, qr_token FROM "table" WHERE restaurant_id = $1 AND qr_token = $2',
+    'SELECT id, restaurant_id, table_number, qr_token FROM "table" WHERE restaurant_id = $1 AND qr_token = $2 AND removed_at IS NULL',
     [restaurantId, qrToken],
   );
   const table = result.rows[0];
@@ -78,7 +78,7 @@ export interface RestaurantTableWithAssignment extends RestaurantTable {
  */
 export async function findTableById(restaurantId: string, tableId: string): Promise<RestaurantTableWithAssignment> {
   const result = await query<RestaurantTableWithAssignment>(
-    'SELECT id, restaurant_id, table_number, qr_token, assigned_waiter_id FROM "table" WHERE id = $1 AND restaurant_id = $2',
+    'SELECT id, restaurant_id, table_number, qr_token, assigned_waiter_id FROM "table" WHERE id = $1 AND restaurant_id = $2 AND removed_at IS NULL',
     [tableId, restaurantId],
   );
   const table = result.rows[0];
@@ -216,6 +216,7 @@ export async function listIdleTablesForRestaurant(restaurantId: string): Promise
     `SELECT t.id, t.table_number
      FROM "table" t
      WHERE t.restaurant_id = $1
+       AND t.removed_at IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM table_session ts
          WHERE ts.table_id = t.id AND ts.status IN ('active', 'awaiting_payment')

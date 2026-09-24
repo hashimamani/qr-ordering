@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { asyncHandler } from '../lib/asyncHandler';
 import { ValidationError } from '../lib/errors';
 import { requirePlatformAdminAuth } from '../middleware/platformAdminAuth';
-import { platformAdminLoginSchema } from '../modules/platformAdmin/platformAdmin.validation';
-import { loginPlatformAdmin } from '../modules/platformAdmin/platformAdmin.service';
+import { platformAdminLoginSchema, resetAdminPasswordSchema } from '../modules/platformAdmin/platformAdmin.validation';
+import { loginPlatformAdmin, resetRestaurantAdminPassword } from '../modules/platformAdmin/platformAdmin.service';
 import { restaurantSignupSchema } from '../modules/admin/admin.validation';
 import { signUpRestaurant } from '../modules/admin/admin.service';
 import { listAllRestaurants } from '../modules/admin/admin.repository';
+import { listAdminsForRestaurant } from '../modules/staff/staff.repository';
 
 export const platformAdminRoutes = Router();
 
@@ -40,5 +41,25 @@ platformAdminRoutes.post(
     if (!parsed.success) throw new ValidationError('Invalid signup payload', parsed.error.flatten());
     const result = await signUpRestaurant(parsed.data);
     res.status(201).json(result);
+  }),
+);
+
+platformAdminRoutes.get(
+  '/platform-admin/restaurants/:id/admins',
+  asyncHandler(async (req, res) => {
+    const admins = await listAdminsForRestaurant(req.params.id);
+    res.json({ admins });
+  }),
+);
+
+// Deliberately scoped to the admin role only -- see
+// resetRestaurantAdminPassword's comment for why.
+platformAdminRoutes.patch(
+  '/platform-admin/staff/:staffId/password',
+  asyncHandler(async (req, res) => {
+    const parsed = resetAdminPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid password payload', parsed.error.flatten());
+    await resetRestaurantAdminPassword(req.params.staffId, parsed.data.password);
+    res.status(204).send();
   }),
 );

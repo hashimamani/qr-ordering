@@ -7,14 +7,16 @@ import {
   categoryBelongsToRestaurant,
   insertMenuItem,
   insertTable,
+  regenerateQrToken,
   type MenuItemRow,
   type TableRow,
 } from './admin.repository';
-import { insertStaffUser } from '../staff/staff.repository';
-import type { createStaffUserSchema } from '../staff/staff.validation';
+import { insertStaffUser, updateStaffUser, type StaffUser } from '../staff/staff.repository';
+import type { createStaffUserSchema, updateStaffUserSchema } from '../staff/staff.validation';
 import type { z } from 'zod';
 
 type CreateStaffUserInput = z.infer<typeof createStaffUserSchema>;
+type UpdateStaffUserInput = z.infer<typeof updateStaffUserSchema>;
 
 const PUBLIC_ORDERING_BASE_URL =
   process.env.PUBLIC_ORDERING_BASE_URL ?? process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
@@ -75,6 +77,20 @@ export interface CreatedTableWithQr {
   qr_code_png_base64: string;
 }
 
+// /order (the React frontend's route), not /r/.../t/... (the raw JSON
+// API path) -- PUBLIC_ORDERING_BASE_URL is the frontend's own origin
+// now that it's a separate S3/CloudFront deployment, not bundled into
+// this API's Lambda.
+async function buildQrResponse(table: TableRow, restaurantSlug: string): Promise<CreatedTableWithQr> {
+  const orderingUrl = `${PUBLIC_ORDERING_BASE_URL}/order?slug=${restaurantSlug}&t=${table.qr_token}`;
+  const qrDataUrl = await QRCode.toDataURL(orderingUrl, { errorCorrectionLevel: 'M', margin: 2 });
+  return {
+    table,
+    ordering_url: orderingUrl,
+    qr_code_png_base64: qrDataUrl.replace(/^data:image\/png;base64,/, ''),
+  };
+}
+
 export async function createTableWithQrCode(
   restaurantId: string,
   restaurantSlug: string,
@@ -82,18 +98,24 @@ export async function createTableWithQrCode(
 ): Promise<CreatedTableWithQr> {
   const qrToken = generateToken();
   const table = await insertTable(restaurantId, { tableNumber, qrToken });
-  // /order (the React frontend's route), not /r/.../t/... (the raw JSON
-  // API path) -- PUBLIC_ORDERING_BASE_URL is the frontend's own origin
-  // now that it's a separate S3/CloudFront deployment, not bundled into
-  // this API's Lambda.
-  const orderingUrl = `${PUBLIC_ORDERING_BASE_URL}/order?slug=${restaurantSlug}&t=${qrToken}`;
-  const qrDataUrl = await QRCode.toDataURL(orderingUrl, { errorCorrectionLevel: 'M', margin: 2 });
+  return buildQrResponse(table, restaurantSlug);
+}
 
-  return {
-    table,
-    ordering_url: orderingUrl,
-    qr_code_png_base64: qrDataUrl.replace(/^data:image\/png;base64,/, ''),
-  };
+/**
+ * Rotates a table's qr_token -- for a lost/damaged printed QR sign, or a
+ * code that leaked somewhere it shouldn't have. The old code stops
+ * resolving immediately (findTableByQrToken looks up by the current
+ * token only); regenerateQrToken enforces "no active session" so this
+ * can never orphan a customer mid-order.
+ */
+export async function regenerateQrCodeForTable(
+  restaurantId: string,
+  restaurantSlug: string,
+  tableId: string,
+): Promise<CreatedTableWithQr> {
+  const qrToken = generateToken();
+  const table = await regenerateQrToken(restaurantId, tableId, qrToken);
+  return buildQrResponse(table, restaurantSlug);
 }
 
 export async function createStaffUserForRestaurant(
@@ -104,6 +126,27 @@ export async function createStaffUserForRestaurant(
   try {
     return await insertStaffUser({
       restaurantId,
+      name: input.name,
+      role: input.role,
+      phoneOrEmail: input.phone_or_email,
+      passwordHash,
+    });
+  } catch (err) {
+    if (err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505') {
+      throw new ConflictError('A staff user with that contact already exists for this restaurant');
+    }
+    throw err;
+  }
+}
+
+export async function updateStaffUserForRestaurant(
+  restaurantId: string,
+  staffId: string,
+  input: UpdateStaffUserInput,
+): Promise<Omit<StaffUser, 'password_hash'>> {
+  const passwordHash = input.password ? await hashPassword(input.password) : undefined;
+  try {
+    return await updateStaffUser(restaurantId, staffId, {
       name: input.name,
       role: input.role,
       phoneOrEmail: input.phone_or_email,

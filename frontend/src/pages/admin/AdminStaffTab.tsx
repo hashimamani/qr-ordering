@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
 import type { StaffRole, StaffUserSummary } from '../../api/types';
+import { useAuth } from '../../auth/AuthContext';
+
+interface EditState {
+  name: string;
+  role: StaffRole;
+  phone_or_email: string;
+  password: string;
+}
 
 export function AdminStaffTab() {
+  const { session } = useAuth();
   const [staff, setStaff] = useState<StaffUserSummary[]>([]);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', role: 'waiter' as StaffRole, phone_or_email: '', password: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiFetch<{ staff: StaffUserSummary[] }>('/admin/staff', { auth: true })
@@ -35,6 +48,56 @@ export function AdminStaffTab() {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setCreating(false);
+    }
+  }
+
+  function startEdit(s: StaffUserSummary) {
+    setEditingId(s.id);
+    setEditForm({ name: s.name, role: s.role, phone_or_email: s.phone_or_email, password: '' });
+    setError('');
+  }
+
+  async function saveEdit(staffId: string) {
+    if (!editForm) return;
+    if (!editForm.name.trim() || !editForm.phone_or_email.trim()) {
+      setError('Name and contact are required.');
+      return;
+    }
+    if (editForm.password && editForm.password.length < 8) {
+      setError('A new password needs 8+ characters -- leave it blank to keep the current one.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = {
+        name: editForm.name.trim(),
+        role: editForm.role,
+        phone_or_email: editForm.phone_or_email.trim(),
+      };
+      if (editForm.password) body.password = editForm.password;
+      await apiFetch(`/admin/staff/${staffId}`, { method: 'PATCH', auth: true, body });
+      setEditingId(null);
+      setEditForm(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeStaff(s: StaffUserSummary) {
+    if (!confirm(`Remove ${s.name}? They will no longer be able to log in.`)) return;
+    setRemovingId(s.id);
+    setError('');
+    try {
+      await apiFetch(`/admin/staff/${s.id}`, { method: 'DELETE', auth: true });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -75,17 +138,80 @@ export function AdminStaffTab() {
             <th>Role</th>
             <th>Contact</th>
             <th>Added</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {staff.map((s) => (
-            <tr key={s.id}>
-              <td>{s.name}</td>
-              <td style={{ textTransform: 'capitalize' }}>{s.role}</td>
-              <td>{s.phone_or_email}</td>
-              <td>{new Date(s.created_at).toLocaleDateString()}</td>
-            </tr>
-          ))}
+          {staff.map((s) =>
+            editingId === s.id && editForm ? (
+              <tr key={s.id}>
+                <td colSpan={5}>
+                  <div className="card" style={{ margin: '8px 0' }}>
+                    <label>Name</label>
+                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                    <div className="grid-2">
+                      <div>
+                        <label>Role</label>
+                        <select
+                          value={editForm.role}
+                          onChange={(e) => setEditForm({ ...editForm, role: e.target.value as StaffRole })}
+                        >
+                          <option value="waiter">Waiter</option>
+                          <option value="kitchen">Kitchen</option>
+                          <option value="bar">Bar</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label>Phone or email</label>
+                        <input
+                          value={editForm.phone_or_email}
+                          onChange={(e) => setEditForm({ ...editForm, phone_or_email: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <label>New password (leave blank to keep current)</label>
+                    <input
+                      type="password"
+                      value={editForm.password}
+                      onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                    />
+                    <button className="primary" disabled={saving} onClick={() => saveEdit(s.id)}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>{' '}
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditForm(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td style={{ textTransform: 'capitalize' }}>{s.role}</td>
+                <td>{s.phone_or_email}</td>
+                <td>{new Date(s.created_at).toLocaleDateString()}</td>
+                <td>
+                  <button className="secondary" onClick={() => startEdit(s)}>
+                    Edit
+                  </button>{' '}
+                  <button
+                    className="secondary danger"
+                    disabled={s.id === session?.staffId || removingId === s.id}
+                    onClick={() => removeStaff(s)}
+                  >
+                    {removingId === s.id ? 'Removing…' : 'Remove'}
+                  </button>
+                </td>
+              </tr>
+            ),
+          )}
         </tbody>
       </table>
     </div>

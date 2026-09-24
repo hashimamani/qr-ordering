@@ -19,6 +19,8 @@ export function AdminTablesTab() {
   const [qrPreviews, setQrPreviews] = useState<Record<string, string>>({});
   const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiFetch<{ tables: AdminTable[]; restaurant_slug: string }>('/admin/tables', { auth: true })
@@ -62,6 +64,39 @@ export function AdminTablesTab() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables, restaurantSlug]);
+
+  async function regenerateQr(tableId: string) {
+    if (!confirm('Regenerate this table\'s QR code? The old printed code will stop working immediately.')) return;
+    setRegeneratingId(tableId);
+    setError('');
+    try {
+      await apiFetch(`/admin/tables/${tableId}/regenerate-qr`, { method: 'POST', auth: true });
+      setQrPreviews((prev) => {
+        const next = { ...prev };
+        delete next[tableId];
+        return next;
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setRegeneratingId(null);
+    }
+  }
+
+  async function removeTable(table: AdminTable) {
+    if (!confirm(`Remove Table ${table.table_number}? Its QR code will stop working. Only possible once the table is closed.`)) return;
+    setRemovingId(table.id);
+    setError('');
+    try {
+      await apiFetch(`/admin/tables/${table.id}`, { method: 'DELETE', auth: true });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   async function createTable() {
     if (!newTableNumber.trim()) return;
@@ -111,7 +146,8 @@ export function AdminTablesTab() {
         <h3>All tables</h3>
         <p className="sub">
           Tables get a waiter automatically (round robin) on their first order or call-waiter press. Reassign
-          below only for a handoff mid-shift -- a waiter going home sick, etc.
+          below only for a handoff mid-shift -- a waiter going home sick, etc. Regenerating a QR code or
+          removing a table only works once that table's session is closed.
         </p>
         {tables.length === 0 && <div className="empty-state">No tables yet.</div>}
         {tables.map((table) => (
@@ -140,6 +176,18 @@ export function AdminTablesTab() {
                     </option>
                   ))}
               </select>
+              <div style={{ marginTop: 8 }}>
+                <button
+                  className="secondary"
+                  disabled={regeneratingId === table.id}
+                  onClick={() => regenerateQr(table.id)}
+                >
+                  {regeneratingId === table.id ? 'Regenerating…' : 'Regenerate QR'}
+                </button>{' '}
+                <button className="secondary danger" disabled={removingId === table.id} onClick={() => removeTable(table)}>
+                  {removingId === table.id ? 'Removing…' : 'Remove table'}
+                </button>
+              </div>
             </div>
             {qrPreviews[table.id] && <img className="qr-preview" style={{ width: 80, height: 80 }} src={qrPreviews[table.id]} alt="" />}
           </div>

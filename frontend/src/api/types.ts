@@ -121,6 +121,12 @@ export interface RestaurantSignupResponse {
   restaurant_id: string;
 }
 
+export interface RestaurantAdmin {
+  id: string;
+  name: string;
+  phone_or_email: string;
+}
+
 export interface VapidPublicKeyResponse {
   publicKey: string;
 }

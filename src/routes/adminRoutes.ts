@@ -10,11 +10,13 @@ import {
   createTableSchema,
   assignWaiterSchema,
 } from '../modules/admin/admin.validation';
-import { createStaffUserSchema } from '../modules/staff/staff.validation';
+import { createStaffUserSchema, updateStaffUserSchema } from '../modules/staff/staff.validation';
 import {
   createMenuItemForRestaurant,
   createTableWithQrCode,
   createStaffUserForRestaurant,
+  updateStaffUserForRestaurant,
+  regenerateQrCodeForTable,
 } from '../modules/admin/admin.service';
 import {
   insertMenuCategory,
@@ -24,10 +26,12 @@ import {
   deleteMenuItemById,
   listTablesForRestaurant,
   assignWaiterToTable,
+  removeTable,
 } from '../modules/admin/admin.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
-import { listStaffUsersForRestaurant } from '../modules/staff/staff.repository';
+import { listStaffUsersForRestaurant, deleteStaffUser } from '../modules/staff/staff.repository';
 import { findRestaurantById } from '../modules/tables/tables.repository';
+import { ForbiddenError } from '../lib/errors';
 
 export const adminRoutes = Router();
 
@@ -164,6 +168,33 @@ adminRoutes.patch(
   }),
 );
 
+// Both gated by "no active session" inside regenerateQrCodeForTable/
+// removeTable -- rotating or removing a table out from under a customer
+// mid-order would orphan them, so both are blocked until the table's
+// closed.
+adminRoutes.post(
+  '/admin/tables/:id/regenerate-qr',
+  asyncHandler(async (req, res) => {
+    const restaurant = await findRestaurantById(req.staff!.restaurantId);
+    const result = await regenerateQrCodeForTable(restaurant.id, restaurant.slug, req.params.id);
+    res.json(result);
+  }),
+);
+
+// Soft-delete (removed_at) rather than a real row delete -- the schema's
+// order.table_session_id has ON DELETE RESTRICT specifically to protect
+// order history, so a hard delete would simply fail for any table that's
+// ever taken an order. This "delete" is what an admin experiences:
+// the table disappears from every admin/staff view and its QR code stops
+// resolving, but nothing is actually destroyed.
+adminRoutes.delete(
+  '/admin/tables/:id',
+  asyncHandler(async (req, res) => {
+    await removeTable(req.staff!.restaurantId, req.params.id);
+    res.status(204).send();
+  }),
+);
+
 adminRoutes.post(
   '/admin/staff',
   asyncHandler(async (req, res) => {
@@ -179,5 +210,26 @@ adminRoutes.get(
   asyncHandler(async (req, res) => {
     const staff = await listStaffUsersForRestaurant(req.staff!.restaurantId);
     res.json({ staff });
+  }),
+);
+
+adminRoutes.patch(
+  '/admin/staff/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateStaffUserSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid staff update payload', parsed.error.flatten());
+    const staffUser = await updateStaffUserForRestaurant(req.staff!.restaurantId, req.params.id, parsed.data);
+    res.json(staffUser);
+  }),
+);
+
+adminRoutes.delete(
+  '/admin/staff/:id',
+  asyncHandler(async (req, res) => {
+    if (req.params.id === req.staff!.sub) {
+      throw new ForbiddenError('You cannot remove your own account');
+    }
+    await deleteStaffUser(req.staff!.restaurantId, req.params.id);
+    res.status(204).send();
   }),
 );

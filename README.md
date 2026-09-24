@@ -385,6 +385,45 @@ session) feeding a "Start a table" picker in the UI —
 `findOrCreateActiveSession` inside `createOrderForTable` creates the
 session on the fly, same as it would for a customer's first scan.
 
+## Staff/table lifecycle management
+
+Three admin/platform-admin capabilities, added together since they all
+touch "managing the people and tables already in the system":
+
+- **Admin can edit or remove their own staff** (`PATCH`/`DELETE
+  /admin/staff/:id`) — name, contact, role, and password reset, all in
+  one endpoint (`updateStaffUserForRestaurant`, `staff.repository.ts`'s
+  `updateStaffUser`/`deleteStaffUser`). Removal is a real `DELETE`, not
+  soft — `staff_user` has no `ON DELETE RESTRICT` pointing at it from
+  anywhere, so nothing blocks it (unlike table removal below). Admin
+  can't remove their own account (`ForbiddenError`) — the one guard
+  against a restaurant locking itself out.
+- **Platform admin can reset a restaurant admin's password** — scoped
+  deliberately narrow: `resetRestaurantAdminPassword`
+  (`platformAdmin.service.ts`) checks the target `staff_user.role ===
+  'admin'` and rejects anything else (`ForbiddenError`). This is the
+  one cross-tenant write in the codebase (alongside the existing
+  cross-tenant *reads*, `listAllRestaurants`/`findStaffUserById`) — it
+  exists purely as the recovery path for a restaurant admin locked out
+  of their own account, not a general "platform admin can touch any
+  staff" capability. `GET /platform-admin/restaurants/:id/admins` lists
+  who's eligible before picking one to reset.
+- **Admin can regenerate a table's QR code or remove the table**, both
+  gated by "no active/awaiting_payment session" (`ConflictError`
+  otherwise) — rotating or removing a table out from under a customer
+  mid-order would orphan them. Regenerating
+  (`POST /admin/tables/:id/regenerate-qr`) rotates `qr_token`; the old
+  code stops resolving immediately. Removing
+  (`DELETE /admin/tables/:id`) is a **soft delete** (`removed_at`
+  timestamp), not a real row delete — discovered mid-build that the
+  schema's `order.table_session_id` has `ON DELETE RESTRICT`
+  specifically to protect order history, so a hard delete would simply
+  *fail* for any table that's ever taken a single order. A removed
+  table disappears from every admin/staff view and its QR stops
+  resolving (`listTablesForRestaurant`, `listIdleTablesForRestaurant`,
+  `findTableByQrToken`, `findTableById` all filter `removed_at IS
+  NULL`), but its order history stays fully intact and queryable.
+
 ## Local setup
 
 ```bash

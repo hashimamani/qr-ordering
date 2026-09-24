@@ -13,6 +13,21 @@ export const createStaffUserSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
+export const updateStaffUserSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    role: z.enum(['admin', 'waiter', 'kitchen', 'bar']).optional(),
+    phone_or_email: z.string().min(3).max(254).optional(),
+    password: z.string().min(8).max(200).optional(),
+  })
+  .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    message: 'At least one field must be provided',
+  });
+
+export const resetStaffPasswordSchema = z.object({
+  password: z.string().min(8).max(200),
+});
+
 export const pushSubscribeSchema = z.object({
   endpoint: z.string().url(),
   keys: z.object({
