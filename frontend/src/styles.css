@@ -252,6 +252,17 @@ table.data-table td button { white-space: nowrap; }
 
 .qr-preview { width: 160px; height: 160px; border: 1px solid var(--ink-200); border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); }
 
+.qr-tooltip-wrapper { position: relative; display: inline-block; }
+.qr-tooltip-wrapper::after {
+  content: attr(data-tooltip);
+  position: absolute; top: calc(100% + 8px); left: 0; transform: translateY(-4px);
+  background: var(--ink-800); color: #fff; font-size: 12px; font-weight: 500;
+  padding: 6px 10px; border-radius: var(--radius-sm); white-space: nowrap; max-width: 320px;
+  box-shadow: var(--shadow-sm); pointer-events: none; opacity: 0; visibility: hidden;
+  transition: opacity 0.12s ease, transform 0.12s ease; z-index: 20;
+}
+.qr-tooltip-wrapper:hover::after { opacity: 1; visibility: visible; transform: translateY(0); }
+
 .availability-toggle {
   border: 1px solid var(--ink-200); background: var(--ink-100); color: var(--ink-600);
   padding: 4px 12px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 700;

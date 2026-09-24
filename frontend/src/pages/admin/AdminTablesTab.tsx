@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { apiFetch, ApiError } from '../../api/client';
 import type { AdminTable, CreatedTableWithQr, StaffUserSummary } from '../../api/types';
+import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
-import { QrCodeIcon, TrashIcon } from '../../components/icons';
+import { QrCodeIcon, TrashIcon, UsersIcon } from '../../components/icons';
 
 // The frontend's own origin is the customer ordering base -- this static
 // build is what the QR code needs to point at, not the API's domain.
@@ -21,7 +22,9 @@ export function AdminTablesTab() {
   const [justCreated, setJustCreated] = useState<CreatedTableWithQr | null>(null);
   const [qrPreviews, setQrPreviews] = useState<Record<string, string>>({});
   const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
-  const [reassigning, setReassigning] = useState<string | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<AdminTable | null>(null);
+  const [reassignChoice, setReassignChoice] = useState('');
+  const [reassigning, setReassigning] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [confirmRegenerate, setConfirmRegenerate] = useState<AdminTable | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<AdminTable | null>(null);
@@ -41,21 +44,28 @@ export function AdminTablesTab() {
 
   useEffect(load, [load]);
 
-  async function reassign(tableId: string, waiterId: string) {
-    if (!waiterId) return;
-    setReassigning(tableId);
+  function openReassign(table: AdminTable) {
+    setReassignTarget(table);
+    setReassignChoice('');
+    setError('');
+  }
+
+  async function doReassign() {
+    if (!reassignTarget || !reassignChoice) return;
+    setReassigning(true);
     setError('');
     try {
-      await apiFetch(`/admin/tables/${tableId}`, {
+      await apiFetch(`/admin/tables/${reassignTarget.id}`, {
         method: 'PATCH',
         auth: true,
-        body: { assigned_waiter_id: waiterId },
+        body: { assigned_waiter_id: reassignChoice },
       });
+      setReassignTarget(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
-      setReassigning(null);
+      setReassigning(false);
     }
   }
 
@@ -152,21 +162,25 @@ export function AdminTablesTab() {
 
       <div className="table-block">
         <h3>All tables</h3>
-        <p className="sub">
-          Tables get a waiter automatically (round robin) on their first order or call-waiter press. Reassign
-          below only for a handoff mid-shift -- a waiter going home sick, etc. Regenerating a QR code or
-          removing a table only works once that table's session is closed.
-        </p>
         {tables.length === 0 && <div className="empty-state">No tables yet.</div>}
         {tables.map((table) => (
           <div key={table.id} className="card table-card">
-            {qrPreviews[table.id] && <img className="qr-preview" style={{ width: 72, height: 72 }} src={qrPreviews[table.id]} alt="" />}
+            {qrPreviews[table.id] && (
+              <span className="qr-tooltip-wrapper" data-tooltip={restaurantSlug ? orderingUrlFor(restaurantSlug, table.qr_token) : ''}>
+                <img className="qr-preview" style={{ width: 72, height: 72 }} src={qrPreviews[table.id]} alt="" />
+              </span>
+            )}
             <div className="table-card-body">
               <div className="top-bar">
                 <div className="item-name">Table {table.table_number}</div>
                 <RowMenu
                   label={`Actions for table ${table.table_number}`}
                   actions={[
+                    {
+                      label: 'Reassign',
+                      icon: <UsersIcon size={16} />,
+                      onSelect: () => openReassign(table),
+                    },
                     {
                       label: 'Regenerate QR',
                       icon: <QrCodeIcon size={16} />,
@@ -181,32 +195,41 @@ export function AdminTablesTab() {
                   ]}
                 />
               </div>
-              {restaurantSlug && (
-                <div className="item-desc" style={{ wordBreak: 'break-all' }}>
-                  {orderingUrlFor(restaurantSlug, table.qr_token)}
-                </div>
-              )}
               <div className="item-desc">
                 {table.assigned_waiter_name ? `Assigned to ${table.assigned_waiter_name}` : 'Unassigned'}
               </div>
-              <select
-                value=""
-                disabled={reassigning === table.id || waiters.length === 0}
-                onChange={(e) => reassign(table.id, e.target.value)}
-              >
-                <option value="">Reassign to…</option>
-                {waiters
-                  .filter((w) => w.id !== table.assigned_waiter_id)
-                  .map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-              </select>
             </div>
           </div>
         ))}
       </div>
+
+      <Dialog
+        open={!!reassignTarget}
+        onClose={() => setReassignTarget(null)}
+        title={`Reassign Table ${reassignTarget?.table_number ?? ''}`}
+        footer={
+          <>
+            <button className="secondary" onClick={() => setReassignTarget(null)}>
+              Cancel
+            </button>
+            <button className="primary" disabled={!reassignChoice || reassigning} onClick={doReassign}>
+              {reassigning ? 'Reassigning…' : 'Reassign'}
+            </button>
+          </>
+        }
+      >
+        <label>Waiter</label>
+        <select value={reassignChoice} onChange={(e) => setReassignChoice(e.target.value)}>
+          <option value="">Select a waiter…</option>
+          {waiters
+            .filter((w) => w.id !== reassignTarget?.assigned_waiter_id)
+            .map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+        </select>
+      </Dialog>
 
       <ConfirmDialog
         open={!!confirmRegenerate}
