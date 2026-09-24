@@ -131,6 +131,7 @@ export function AdminStaffTab() {
         </button>
       </div>
 
+      <div className="table-scroll">
       <table className="data-table">
         <thead>
           <tr>
@@ -214,6 +215,7 @@ export function AdminStaffTab() {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

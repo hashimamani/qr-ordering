@@ -32,9 +32,10 @@ export function PlatformAdminLoginPage() {
   return (
     <>
       <header>
-        <h1>Platform admin login</h1>
+        <h1>QR Ordering</h1>
+        <div className="sub">Platform admin</div>
       </header>
-      <main>
+      <main className="auth">
         {error && <div className="error-banner">{error}</div>}
         <div className="card">
           <label htmlFor="email">Email</label>

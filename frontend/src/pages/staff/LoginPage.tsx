@@ -40,9 +40,10 @@ export function LoginPage() {
   return (
     <>
       <header>
-        <h1>Staff login</h1>
+        <h1>QR Ordering</h1>
+        <div className="sub">Staff login</div>
       </header>
-      <main>
+      <main className="auth">
         {error && <div className="error-banner">{error}</div>}
         <div className="card">
           <label htmlFor="slug">Restaurant slug</label>

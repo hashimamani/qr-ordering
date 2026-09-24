@@ -169,6 +169,7 @@ export function PlatformAdminDashboardPage() {
           </button>
         </div>
 
+        <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
@@ -193,6 +194,7 @@ export function PlatformAdminDashboardPage() {
             ))}
           </tbody>
         </table>
+        </div>
 
         {managingRestaurantId && (
           <div className="card">
