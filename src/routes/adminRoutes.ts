@@ -28,7 +28,7 @@ import {
   assignWaiterToTable,
   removeTable,
 } from '../modules/admin/admin.repository';
-import { listMenuForRestaurant } from '../modules/menu/menu.repository';
+import { listMenuForRestaurantAdmin } from '../modules/menu/menu.repository';
 import { listStaffUsersForRestaurant, deleteStaffUser } from '../modules/staff/staff.repository';
 import { findRestaurantById } from '../modules/tables/tables.repository';
 import { ForbiddenError } from '../lib/errors';
@@ -50,7 +50,7 @@ adminRoutes.use('/admin', requireStaffAuth, requireRole('admin'));
 adminRoutes.get(
   '/admin/menu',
   asyncHandler(async (req, res) => {
-    const menu = await listMenuForRestaurant(req.staff!.restaurantId);
+    const menu = await listMenuForRestaurantAdmin(req.staff!.restaurantId);
     res.json(menu);
   }),
 );

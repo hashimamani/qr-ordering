@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { apiFetch, ApiError } from '../../api/client';
 import type { AdminTable, CreatedTableWithQr, StaffUserSummary } from '../../api/types';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { RowMenu } from '../../components/RowMenu';
+import { QrCodeIcon, TrashIcon } from '../../components/icons';
 
 // The frontend's own origin is the customer ordering base -- this static
 // build is what the QR code needs to point at, not the API's domain.
@@ -20,7 +23,9 @@ export function AdminTablesTab() {
   const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmRegenerate, setConfirmRegenerate] = useState<AdminTable | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<AdminTable | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   const load = useCallback(() => {
     apiFetch<{ tables: AdminTable[]; restaurant_slug: string }>('/admin/tables', { auth: true })
@@ -65,8 +70,9 @@ export function AdminTablesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables, restaurantSlug]);
 
-  async function regenerateQr(tableId: string) {
-    if (!confirm('Regenerate this table\'s QR code? The old printed code will stop working immediately.')) return;
+  async function doRegenerateQr() {
+    if (!confirmRegenerate) return;
+    const tableId = confirmRegenerate.id;
     setRegeneratingId(tableId);
     setError('');
     try {
@@ -76,6 +82,7 @@ export function AdminTablesTab() {
         delete next[tableId];
         return next;
       });
+      setConfirmRegenerate(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
@@ -84,17 +91,18 @@ export function AdminTablesTab() {
     }
   }
 
-  async function removeTable(table: AdminTable) {
-    if (!confirm(`Remove Table ${table.table_number}? Its QR code will stop working. Only possible once the table is closed.`)) return;
-    setRemovingId(table.id);
+  async function doRemoveTable() {
+    if (!confirmRemove) return;
+    setRemoveBusy(true);
     setError('');
     try {
-      await apiFetch(`/admin/tables/${table.id}`, { method: 'DELETE', auth: true });
+      await apiFetch(`/admin/tables/${confirmRemove.id}`, { method: 'DELETE', auth: true });
+      setConfirmRemove(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
-      setRemovingId(null);
+      setRemoveBusy(false);
     }
   }
 
@@ -151,9 +159,28 @@ export function AdminTablesTab() {
         </p>
         {tables.length === 0 && <div className="empty-state">No tables yet.</div>}
         {tables.map((table) => (
-          <div key={table.id} className="card item-row">
-            <div>
-              <div className="item-name">Table {table.table_number}</div>
+          <div key={table.id} className="card table-card">
+            {qrPreviews[table.id] && <img className="qr-preview" style={{ width: 72, height: 72 }} src={qrPreviews[table.id]} alt="" />}
+            <div className="table-card-body">
+              <div className="top-bar">
+                <div className="item-name">Table {table.table_number}</div>
+                <RowMenu
+                  label={`Actions for table ${table.table_number}`}
+                  actions={[
+                    {
+                      label: 'Regenerate QR',
+                      icon: <QrCodeIcon size={16} />,
+                      onSelect: () => setConfirmRegenerate(table),
+                    },
+                    {
+                      label: 'Remove table',
+                      icon: <TrashIcon size={16} />,
+                      danger: true,
+                      onSelect: () => setConfirmRemove(table),
+                    },
+                  ]}
+                />
+              </div>
               {restaurantSlug && (
                 <div className="item-desc" style={{ wordBreak: 'break-all' }}>
                   {orderingUrlFor(restaurantSlug, table.qr_token)}
@@ -176,23 +203,30 @@ export function AdminTablesTab() {
                     </option>
                   ))}
               </select>
-              <div style={{ marginTop: 8 }}>
-                <button
-                  className="secondary"
-                  disabled={regeneratingId === table.id}
-                  onClick={() => regenerateQr(table.id)}
-                >
-                  {regeneratingId === table.id ? 'Regenerating…' : 'Regenerate QR'}
-                </button>{' '}
-                <button className="secondary danger" disabled={removingId === table.id} onClick={() => removeTable(table)}>
-                  {removingId === table.id ? 'Removing…' : 'Remove table'}
-                </button>
-              </div>
             </div>
-            {qrPreviews[table.id] && <img className="qr-preview" style={{ width: 80, height: 80 }} src={qrPreviews[table.id]} alt="" />}
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmRegenerate}
+        title="Regenerate QR code"
+        message={`Regenerate the QR code for Table ${confirmRegenerate?.table_number}? The current printed code will stop working immediately.`}
+        confirmLabel="Regenerate"
+        busy={regeneratingId === confirmRegenerate?.id}
+        onConfirm={doRegenerateQr}
+        onCancel={() => setConfirmRegenerate(null)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmRemove}
+        title="Remove table"
+        message={`Remove Table ${confirmRemove?.table_number}? Its QR code will stop working. This is only possible once the table's session is closed.`}
+        confirmLabel="Remove"
+        busy={removeBusy}
+        onConfirm={doRemoveTable}
+        onCancel={() => setConfirmRemove(null)}
+      />
     </div>
   );
 }

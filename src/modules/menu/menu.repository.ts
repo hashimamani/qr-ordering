@@ -20,6 +20,10 @@ export interface MenuItemForPricing extends MenuItem {
   destination: 'kitchen' | 'bar';
 }
 
+// Deliberately excludes destination -- this is the customer-facing menu
+// (resolveTableForOrdering in tables.service.ts), and destination is
+// internal kitchen/bar routing info, not something a customer's order
+// page needs to know or show.
 export async function listMenuForRestaurant(
   restaurantId: string,
 ): Promise<{ categories: MenuCategory[]; items: MenuItem[] }> {
@@ -30,6 +34,33 @@ export async function listMenuForRestaurant(
     ),
     query<MenuItem>(
       `SELECT id, category_id, name, description, price, is_available
+       FROM menu_item
+       WHERE restaurant_id = $1
+       ORDER BY name`,
+      [restaurantId],
+    ),
+  ]);
+
+  return { categories: categories.rows, items: items.rows };
+}
+
+export interface MenuItemWithDestination extends MenuItem {
+  destination: 'kitchen' | 'bar';
+}
+
+// Admin's own menu view -- same data as listMenuForRestaurant, plus
+// destination, since an admin editing the menu needs to see/change which
+// queue an item routes to.
+export async function listMenuForRestaurantAdmin(
+  restaurantId: string,
+): Promise<{ categories: MenuCategory[]; items: MenuItemWithDestination[] }> {
+  const [categories, items] = await Promise.all([
+    query<MenuCategory>(
+      'SELECT id, name, sort_order FROM menu_category WHERE restaurant_id = $1 ORDER BY sort_order, name',
+      [restaurantId],
+    ),
+    query<MenuItemWithDestination>(
+      `SELECT id, category_id, name, description, price, is_available, destination
        FROM menu_item
        WHERE restaurant_id = $1
        ORDER BY name`,

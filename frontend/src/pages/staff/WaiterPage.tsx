@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from '../../api/client';
 import type { IdleTable, WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
 import { TakeOrderPanel } from '../../components/TakeOrderPanel';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -13,6 +14,7 @@ export function WaiterPage() {
   const [idleTables, setIdleTables] = useState<IdleTable[]>([]);
   const [error, setError] = useState('');
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
   const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
   const [startTableId, setStartTableId] = useState('');
   const push = usePushSubscription();
@@ -34,11 +36,13 @@ export function WaiterPage() {
     () => load(),
   );
 
-  async function closeTable(sessionId: string) {
-    if (!confirm('Close this table? Only do this once payment has been collected.')) return;
+  async function closeTable() {
+    if (!confirmClose) return;
+    const sessionId = confirmClose.session_id;
     setClosingId(sessionId);
     try {
       await apiFetch(`/staff/table-sessions/${sessionId}/close`, { method: 'PATCH', auth: true });
+      setConfirmClose(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
@@ -104,7 +108,7 @@ export function WaiterPage() {
               >
                 {takingOrderForTableId === ts.table_id ? 'Cancel' : 'Take order'}
               </button>{' '}
-              <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => closeTable(ts.session_id)}>
+              <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => setConfirmClose(ts)}>
                 Close table
               </button>
             </div>
@@ -140,6 +144,16 @@ export function WaiterPage() {
           ))}
         </div>
       ))}
+
+      <ConfirmDialog
+        open={!!confirmClose}
+        title="Close table"
+        message={`Close Table ${confirmClose?.table_number}? Only do this once payment has been collected.`}
+        confirmLabel="Close table"
+        busy={closingId === confirmClose?.session_id}
+        onConfirm={closeTable}
+        onCancel={() => setConfirmClose(null)}
+      />
     </StaffLayout>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertContactValueMatchesChannel, createOrderSchema } from './orders.validation';
+import { assertContactValueMatchesChannel, createOrderSchema, normalizeContactValue } from './orders.validation';
 import { ValidationError } from '../../lib/errors';
 
 describe('createOrderSchema', () => {
@@ -70,5 +70,37 @@ describe('assertContactValueMatchesChannel', () => {
         contact_value: 'not-an-email',
       }),
     ).toThrow(ValidationError);
+  });
+});
+
+describe('normalizeContactValue', () => {
+  it('converts a leading-zero local number to E.164', () => {
+    const result = normalizeContactValue({ items: [], contact_channel: 'sms', contact_value: '0714293809' });
+    expect(result.contact_value).toBe('+254714293809');
+  });
+
+  it('converts a bare 9-digit number to E.164', () => {
+    const result = normalizeContactValue({ items: [], contact_channel: 'sms', contact_value: '714293809' });
+    expect(result.contact_value).toBe('+254714293809');
+  });
+
+  it('leaves an already-E.164 number unchanged', () => {
+    const result = normalizeContactValue({ items: [], contact_channel: 'sms', contact_value: '+254714293809' });
+    expect(result.contact_value).toBe('+254714293809');
+  });
+
+  it('strips spaces and dashes before normalizing', () => {
+    const result = normalizeContactValue({ items: [], contact_channel: 'sms', contact_value: '0714-293-809' });
+    expect(result.contact_value).toBe('+254714293809');
+  });
+
+  it('leaves email contact values untouched', () => {
+    const result = normalizeContactValue({ items: [], contact_channel: 'email', contact_value: 'diner@example.com' });
+    expect(result.contact_value).toBe('diner@example.com');
+  });
+
+  it('normalized output passes assertContactValueMatchesChannel', () => {
+    const normalized = normalizeContactValue({ items: [], contact_channel: 'sms', contact_value: '0714293809' });
+    expect(() => assertContactValueMatchesChannel(normalized)).not.toThrow();
   });
 });

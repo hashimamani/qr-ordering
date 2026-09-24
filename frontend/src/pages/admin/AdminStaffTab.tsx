@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
 import type { StaffRole, StaffUserSummary } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
+import { Dialog } from '../../components/Dialog';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { RowMenu } from '../../components/RowMenu';
+import { PencilIcon, TrashIcon } from '../../components/icons';
 
 interface EditState {
   name: string;
@@ -16,10 +20,11 @@ export function AdminStaffTab() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', role: 'waiter' as StaffRole, phone_or_email: '', password: '' });
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<StaffUserSummary | null>(null);
   const [editForm, setEditForm] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<StaffUserSummary | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   const load = useCallback(() => {
     apiFetch<{ staff: StaffUserSummary[] }>('/admin/staff', { auth: true })
@@ -52,13 +57,13 @@ export function AdminStaffTab() {
   }
 
   function startEdit(s: StaffUserSummary) {
-    setEditingId(s.id);
+    setEditing(s);
     setEditForm({ name: s.name, role: s.role, phone_or_email: s.phone_or_email, password: '' });
     setError('');
   }
 
-  async function saveEdit(staffId: string) {
-    if (!editForm) return;
+  async function saveEdit() {
+    if (!editing || !editForm) return;
     if (!editForm.name.trim() || !editForm.phone_or_email.trim()) {
       setError('Name and contact are required.');
       return;
@@ -76,8 +81,8 @@ export function AdminStaffTab() {
         phone_or_email: editForm.phone_or_email.trim(),
       };
       if (editForm.password) body.password = editForm.password;
-      await apiFetch(`/admin/staff/${staffId}`, { method: 'PATCH', auth: true, body });
-      setEditingId(null);
+      await apiFetch(`/admin/staff/${editing.id}`, { method: 'PATCH', auth: true, body });
+      setEditing(null);
       setEditForm(null);
       load();
     } catch (err) {
@@ -87,17 +92,18 @@ export function AdminStaffTab() {
     }
   }
 
-  async function removeStaff(s: StaffUserSummary) {
-    if (!confirm(`Remove ${s.name}? They will no longer be able to log in.`)) return;
-    setRemovingId(s.id);
+  async function confirmRemove() {
+    if (!removing) return;
+    setRemoveBusy(true);
     setError('');
     try {
-      await apiFetch(`/admin/staff/${s.id}`, { method: 'DELETE', auth: true });
+      await apiFetch(`/admin/staff/${removing.id}`, { method: 'DELETE', auth: true });
+      setRemoving(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
-      setRemovingId(null);
+      setRemoveBusy(false);
     }
   }
 
@@ -132,90 +138,109 @@ export function AdminStaffTab() {
       </div>
 
       <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Role</th>
-            <th>Contact</th>
-            <th>Added</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {staff.map((s) =>
-            editingId === s.id && editForm ? (
-              <tr key={s.id}>
-                <td colSpan={5}>
-                  <div className="card" style={{ margin: '8px 0' }}>
-                    <label>Name</label>
-                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-                    <div className="grid-2">
-                      <div>
-                        <label>Role</label>
-                        <select
-                          value={editForm.role}
-                          onChange={(e) => setEditForm({ ...editForm, role: e.target.value as StaffRole })}
-                        >
-                          <option value="waiter">Waiter</option>
-                          <option value="kitchen">Kitchen</option>
-                          <option value="bar">Bar</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label>Phone or email</label>
-                        <input
-                          value={editForm.phone_or_email}
-                          onChange={(e) => setEditForm({ ...editForm, phone_or_email: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <label>New password (leave blank to keep current)</label>
-                    <input
-                      type="password"
-                      value={editForm.password}
-                      onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                    />
-                    <button className="primary" disabled={saving} onClick={() => saveEdit(s.id)}>
-                      {saving ? 'Saving…' : 'Save'}
-                    </button>{' '}
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditForm(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Contact</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {staff.map((s) => (
               <tr key={s.id}>
                 <td>{s.name}</td>
                 <td style={{ textTransform: 'capitalize' }}>{s.role}</td>
                 <td>{s.phone_or_email}</td>
                 <td>{new Date(s.created_at).toLocaleDateString()}</td>
                 <td>
-                  <button className="secondary" onClick={() => startEdit(s)}>
-                    Edit
-                  </button>{' '}
-                  <button
-                    className="secondary danger"
-                    disabled={s.id === session?.staffId || removingId === s.id}
-                    onClick={() => removeStaff(s)}
-                  >
-                    {removingId === s.id ? 'Removing…' : 'Remove'}
-                  </button>
+                  <RowMenu
+                    label={`Actions for ${s.name}`}
+                    actions={[
+                      { label: 'Edit', icon: <PencilIcon size={16} />, onSelect: () => startEdit(s) },
+                      {
+                        label: 'Remove',
+                        icon: <TrashIcon size={16} />,
+                        danger: true,
+                        disabled: s.id === session?.staffId,
+                        onSelect: () => setRemoving(s),
+                      },
+                    ]}
+                  />
                 </td>
               </tr>
-            ),
-          )}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
       </div>
+
+      <Dialog
+        open={!!editing && !!editForm}
+        onClose={() => {
+          setEditing(null);
+          setEditForm(null);
+        }}
+        title={`Edit ${editing?.name ?? ''}`}
+        footer={
+          <>
+            <button
+              className="secondary"
+              onClick={() => {
+                setEditing(null);
+                setEditForm(null);
+              }}
+            >
+              Cancel
+            </button>
+            <button className="primary" disabled={saving} onClick={saveEdit}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        {editForm && (
+          <div>
+            <label>Name</label>
+            <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            <div className="grid-2">
+              <div>
+                <label>Role</label>
+                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as StaffRole })}>
+                  <option value="waiter">Waiter</option>
+                  <option value="kitchen">Kitchen</option>
+                  <option value="bar">Bar</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label>Phone or email</label>
+                <input
+                  value={editForm.phone_or_email}
+                  onChange={(e) => setEditForm({ ...editForm, phone_or_email: e.target.value })}
+                />
+              </div>
+            </div>
+            <label>New password (leave blank to keep current)</label>
+            <input
+              type="password"
+              value={editForm.password}
+              onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+            />
+          </div>
+        )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!removing}
+        title="Remove staff login"
+        message={`Remove ${removing?.name}? They will no longer be able to log in.`}
+        confirmLabel="Remove"
+        busy={removeBusy}
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoving(null)}
+      />
     </div>
   );
 }

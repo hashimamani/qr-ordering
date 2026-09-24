@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { ResolveTableResponse, PlaceOrderResponse } from '../../api/types';
+import { Dialog } from '../../components/Dialog';
 
 export function OrderPage() {
   const [params] = useSearchParams();
@@ -15,6 +16,7 @@ export function OrderPage() {
   const [channel, setChannel] = useState<'sms' | 'email'>('sms');
   const [contact, setContact] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   useEffect(() => {
     if (!slug || !qrToken) {
@@ -35,6 +37,8 @@ export function OrderPage() {
     return map;
   }, [data]);
 
+  const itemById = useMemo(() => new Map(data?.menu.items.map((i) => [i.id, i]) ?? []), [data]);
+
   function setQty(itemId: string, qty: number) {
     setCart((prev) => {
       const next = new Map(prev);
@@ -45,6 +49,7 @@ export function OrderPage() {
   }
 
   const totalItems = [...cart.values()].reduce((a, b) => a + b, 0);
+  const totalPrice = [...cart.entries()].reduce((sum, [id, qty]) => sum + Number(itemById.get(id)?.price ?? 0) * qty, 0);
 
   async function submitOrder() {
     if (!slug || !qrToken || !contact.trim()) {
@@ -89,15 +94,19 @@ export function OrderPage() {
                     <div className="item-name">{item.name}</div>
                     {item.description && <div className="item-desc">{item.description}</div>}
                     <div className="item-price">
-                      KSh {Number(item.price).toFixed(0)}
+                      KSh {Number(item.price).toLocaleString()}
                       {!item.is_available && ' (unavailable)'}
                     </div>
                   </div>
                   {item.is_available && (
                     <div className="qty-controls">
-                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) - 1)}>-</button>
+                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) - 1)} aria-label={`Remove one ${item.name}`}>
+                        −
+                      </button>
                       <span>{cart.get(item.id) ?? 0}</span>
-                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) + 1)}>+</button>
+                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) + 1)} aria-label={`Add one ${item.name}`}>
+                        +
+                      </button>
                     </div>
                   )}
                 </div>
@@ -106,21 +115,60 @@ export function OrderPage() {
           );
         })}
 
-        {totalItems > 0 && (
-          <div className="card">
-            <label htmlFor="channel">Get your tracking link by</label>
-            <select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as 'sms' | 'email')}>
-              <option value="sms">SMS</option>
-              <option value="email">Email</option>
-            </select>
-            <label htmlFor="contact">Phone number (+2547XXXXXXXX) or email</label>
-            <input id="contact" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="+254712345678" />
-            <button className="primary" disabled={submitting} onClick={submitOrder}>
-              {submitting ? 'Placing order…' : `Place order (${totalItems} item${totalItems > 1 ? 's' : ''})`}
+        {totalItems > 0 && <div className="cart-bar-spacer" />}
+      </main>
+
+      {totalItems > 0 && (
+        <div className="cart-bar">
+          <div className="cart-bar-inner">
+            <button className="primary" onClick={() => setCheckoutOpen(true)}>
+              <span className="cart-bar-count">{totalItems}</span>
+              {`  ${totalItems === 1 ? 'item' : 'items'} · KSh ${totalPrice.toLocaleString()} · Review order`}
             </button>
           </div>
-        )}
-      </main>
+        </div>
+      )}
+
+      <Dialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} title="Confirm your order">
+        <div>
+          {[...cart.entries()].map(([id, qty]) => {
+            const item = itemById.get(id);
+            if (!item) return null;
+            return (
+              <div key={id} className="item-row">
+                <span>
+                  {qty}× {item.name}
+                </span>
+                <span className="item-price">KSh {(Number(item.price) * qty).toLocaleString()}</span>
+              </div>
+            );
+          })}
+          <div className="item-row cart-total-row">
+            <span>Total</span>
+            <span>KSh {totalPrice.toLocaleString()}</span>
+          </div>
+
+          <label htmlFor="channel" style={{ marginTop: 16 }}>
+            Get your tracking link by
+          </label>
+          <select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as 'sms' | 'email')}>
+            <option value="sms">SMS</option>
+            <option value="email">Email</option>
+          </select>
+          <label htmlFor="contact">
+            {channel === 'sms' ? 'Phone number' : 'Email address'}
+          </label>
+          <input
+            id="contact"
+            value={contact}
+            onChange={(e) => setContact(e.target.value)}
+            placeholder={channel === 'sms' ? '0712345678 or +254712345678' : 'you@example.com'}
+          />
+          <button className="primary" disabled={submitting} onClick={submitOrder}>
+            {submitting ? 'Placing order…' : `Place order · KSh ${totalPrice.toLocaleString()}`}
+          </button>
+        </div>
+      </Dialog>
     </>
   );
 }

@@ -14,7 +14,7 @@ import { insertOrder, type CreateOrderItemInput } from './orders.repository';
 import { generateToken } from '../../lib/token';
 import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, ValidationError } from '../../lib/errors';
-import { assertContactValueMatchesChannel, type CreateOrderInput } from './orders.validation';
+import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { broadcastEvent } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
@@ -37,8 +37,9 @@ export interface PlaceOrderResult {
 async function createOrderForTable(
   restaurant: Restaurant,
   table: RestaurantTable,
-  input: CreateOrderInput,
+  rawInput: CreateOrderInput,
 ): Promise<{ order: { id: string; public_token: string }; trackingUrl: string; destinations: Set<'kitchen' | 'bar'> }> {
+  const input = normalizeContactValue(rawInput);
   assertContactValueMatchesChannel(input);
 
   const session = await findOrCreateActiveSession(table.id);

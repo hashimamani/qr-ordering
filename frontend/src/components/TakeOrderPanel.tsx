@@ -118,7 +118,7 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
             id={`contact-${tableId}`}
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder="+254712345678"
+            placeholder={channel === 'sms' ? '0712345678 or +254712345678' : 'you@example.com'}
           />
           <button className="primary" disabled={submitting} onClick={submitOrder}>
             {submitting ? 'Placing order…' : `Place order (${totalItems} item${totalItems > 1 ? 's' : ''})`}

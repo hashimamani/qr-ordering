@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
 import type { MenuCategory, MenuItem, Destination } from '../../api/types';
+import { Dialog } from '../../components/Dialog';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { RowMenu } from '../../components/RowMenu';
+import { PencilIcon, TrashIcon } from '../../components/icons';
 
 export function AdminMenuTab() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -16,6 +20,10 @@ export function AdminMenuTab() {
     destination: 'kitchen' as Destination,
   });
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<MenuCategory | null>(null);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<MenuItem | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const load = useCallback(() => {
     apiFetch<{ categories: MenuCategory[]; items: MenuItem[] }>('/admin/menu', { auth: true })
@@ -43,13 +51,17 @@ export function AdminMenuTab() {
     }
   }
 
-  async function deleteCategory(id: string) {
-    if (!confirm('Delete this category? Items in it will need a new category first.')) return;
+  async function confirmDeleteCategory() {
+    if (!deleteCategoryTarget) return;
+    setDeleteBusy(true);
     try {
-      await apiFetch(`/admin/menu-categories/${id}`, { method: 'DELETE', auth: true });
+      await apiFetch(`/admin/menu-categories/${deleteCategoryTarget.id}`, { method: 'DELETE', auth: true });
+      setDeleteCategoryTarget(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -90,6 +102,7 @@ export function AdminMenuTab() {
 
   async function saveEdit() {
     if (!editingItem) return;
+    setSaving(true);
     try {
       await apiFetch(`/admin/menu-items/${editingItem.id}`, {
         method: 'PATCH',
@@ -105,16 +118,22 @@ export function AdminMenuTab() {
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function deleteItem(id: string) {
-    if (!confirm('Delete this menu item?')) return;
+  async function confirmDeleteItem() {
+    if (!deleteItemTarget) return;
+    setDeleteBusy(true);
     try {
-      await apiFetch(`/admin/menu-items/${id}`, { method: 'DELETE', auth: true });
+      await apiFetch(`/admin/menu-items/${deleteItemTarget.id}`, { method: 'DELETE', auth: true });
+      setDeleteItemTarget(null);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -174,70 +193,124 @@ export function AdminMenuTab() {
           <div key={category.id} className="table-block">
             <div className="top-bar">
               <h3>{category.name}</h3>
-              <button className="secondary danger" onClick={() => deleteCategory(category.id)}>
-                Delete category
-              </button>
+              <RowMenu
+                label={`Actions for ${category.name}`}
+                actions={[
+                  {
+                    label: 'Delete category',
+                    icon: <TrashIcon size={16} />,
+                    danger: true,
+                    onSelect: () => setDeleteCategoryTarget(category),
+                  },
+                ]}
+              />
             </div>
             {categoryItems.length === 0 && <div className="empty-state">No items yet.</div>}
-            {categoryItems.map((item) =>
-              editingItem?.id === item.id ? (
-                <div key={item.id} className="card">
-                  <input value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} />
-                  <input
-                    value={editingItem.description ?? ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                    placeholder="Description"
+            {categoryItems.map((item) => (
+              <div key={item.id} className={`card item-row ${item.is_available ? '' : 'unavailable'}`}>
+                <div>
+                  <div className="item-name">{item.name}</div>
+                  {item.description && <div className="item-desc">{item.description}</div>}
+                  <div className="item-price">
+                    KSh {Number(item.price).toLocaleString()} &middot; {item.destination}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    className={`availability-toggle ${item.is_available ? 'available' : ''}`}
+                    onClick={() => toggleAvailability(item)}
+                  >
+                    <span className="status-pill" style={{ background: 'transparent', padding: 0 }}>
+                      {item.is_available ? 'Available' : 'Unavailable'}
+                    </span>
+                  </button>
+                  <RowMenu
+                    label={`Actions for ${item.name}`}
+                    actions={[
+                      { label: 'Edit', icon: <PencilIcon size={16} />, onSelect: () => setEditingItem(item) },
+                      {
+                        label: 'Delete',
+                        icon: <TrashIcon size={16} />,
+                        danger: true,
+                        onSelect: () => setDeleteItemTarget(item),
+                      },
+                    ]}
                   />
-                  <div className="grid-2">
-                    <input
-                      type="number"
-                      value={editingItem.price}
-                      onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
-                    />
-                    <select
-                      value={editingItem.destination}
-                      onChange={(e) => setEditingItem({ ...editingItem, destination: e.target.value as Destination })}
-                    >
-                      <option value="kitchen">Kitchen</option>
-                      <option value="bar">Bar</option>
-                    </select>
-                  </div>
-                  <div className="grid-2">
-                    <button className="primary" onClick={saveEdit}>
-                      Save
-                    </button>
-                    <button className="secondary" onClick={() => setEditingItem(null)}>
-                      Cancel
-                    </button>
-                  </div>
                 </div>
-              ) : (
-                <div key={item.id} className={`card item-row ${item.is_available ? '' : 'unavailable'}`}>
-                  <div>
-                    <div className="item-name">{item.name}</div>
-                    {item.description && <div className="item-desc">{item.description}</div>}
-                    <div className="item-price">
-                      KSh {Number(item.price).toFixed(0)} &middot; {item.destination}
-                      {!item.is_available && ' · unavailable'}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="secondary" onClick={() => setEditingItem(item)}>
-                      Edit
-                    </button>
-                    <button className="secondary" onClick={() => toggleAvailability(item)}>
-                      {item.is_available ? 'Mark unavailable' : 'Mark available'}
-                    </button>
-                    <button className="secondary danger" onClick={() => deleteItem(item.id)}>
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ),
-            )}
+              </div>
+            ))}
           </div>
         );
       })}
+
+      <Dialog
+        open={!!editingItem}
+        onClose={() => setEditingItem(null)}
+        title={`Edit ${editingItem?.name ?? ''}`}
+        footer={
+          <>
+            <button className="secondary" onClick={() => setEditingItem(null)}>
+              Cancel
+            </button>
+            <button className="primary" disabled={saving} onClick={saveEdit}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        {editingItem && (
+          <div>
+            <label>Name</label>
+            <input value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} />
+            <label>Description</label>
+            <input
+              value={editingItem.description ?? ''}
+              onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+              placeholder="Description"
+            />
+            <div className="grid-2">
+              <div>
+                <label>Price (KSh)</label>
+                <input
+                  type="number"
+                  value={editingItem.price}
+                  onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
+                />
+              </div>
+              <div>
+                <label>Destination</label>
+                <select
+                  value={editingItem.destination}
+                  onChange={(e) => setEditingItem({ ...editingItem, destination: e.target.value as Destination })}
+                >
+                  <option value="kitchen">Kitchen</option>
+                  <option value="bar">Bar</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteCategoryTarget}
+        title="Delete category"
+        message={`Delete "${deleteCategoryTarget?.name}"? Items in it will need a new category first.`}
+        confirmLabel="Delete"
+        busy={deleteBusy}
+        onConfirm={confirmDeleteCategory}
+        onCancel={() => setDeleteCategoryTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteItemTarget}
+        title="Delete menu item"
+        message={`Delete "${deleteItemTarget?.name}"? This can't be undone.`}
+        confirmLabel="Delete"
+        busy={deleteBusy}
+        onConfirm={confirmDeleteItem}
+        onCancel={() => setDeleteItemTarget(null)}
+      />
     </div>
   );
 }
