@@ -7,7 +7,11 @@ import { loginStaff } from '../modules/staff/staff.service';
 import { staffLoginSchema, pushSubscribeSchema } from '../modules/staff/staff.validation';
 import { getQueueForDestination, updateOrderItemStatus } from '../modules/orderItems/orderItems.service';
 import { getWaiterView, closeSession } from '../modules/tables/tables.service';
+import { listIdleTablesForRestaurant } from '../modules/tables/tables.repository';
 import { upsertPushSubscription } from '../modules/push/push.repository';
+import { listMenuForRestaurant } from '../modules/menu/menu.repository';
+import { placeStaffOrder } from '../modules/orders/orders.service';
+import { createOrderSchema } from '../modules/orders/orders.validation';
 
 export const staffRoutes = Router();
 
@@ -54,6 +58,51 @@ staffRoutes.get(
   asyncHandler(async (req, res) => {
     const sessions = await getWaiterView(req.staff!.restaurantId, req.staff!.role, req.staff!.sub);
     res.json({ table_sessions: sessions });
+  }),
+);
+
+// Tables with no session yet (customer hasn't scanned, or can't) -- a
+// waiter starting a staff-assisted order for one of these has nowhere
+// else to find it, since it won't appear in /staff/tables until a
+// session exists.
+staffRoutes.get(
+  '/staff/idle-tables',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    const tables = await listIdleTablesForRestaurant(req.staff!.restaurantId);
+    res.json({ tables });
+  }),
+);
+
+staffRoutes.get(
+  '/staff/menu',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    const menu = await listMenuForRestaurant(req.staff!.restaurantId);
+    res.json(menu);
+  }),
+);
+
+// Staff-assisted ordering -- for a customer at the table who can't scan
+// the QR code themselves. See orders.service.ts's placeStaffOrder for the
+// full reasoning (direct-assigns the table to the ordering waiter rather
+// than round robin, since they're already standing there).
+staffRoutes.post(
+  '/staff/tables/:tableId/orders',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    const parsed = createOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid order payload', parsed.error.flatten());
+    }
+    const result = await placeStaffOrder(req.staff!.restaurantId, req.params.tableId, parsed.data, {
+      id: req.staff!.sub,
+      role: req.staff!.role,
+    });
+    res.status(201).json(result);
   }),
 );
 

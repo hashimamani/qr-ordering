@@ -65,6 +65,29 @@ export async function findTableByQrToken(
   return table;
 }
 
+export interface RestaurantTableWithAssignment extends RestaurantTable {
+  assigned_waiter_id: string | null;
+}
+
+/**
+ * Staff-order counterpart to findTableByQrToken -- a waiter placing an
+ * order on a customer's behalf (see orders.service.ts's placeStaffOrder)
+ * looks the table up by id from their own dashboard, not by qr_token.
+ * Includes assigned_waiter_id so the caller can enforce "only your own
+ * table" without a second query.
+ */
+export async function findTableById(restaurantId: string, tableId: string): Promise<RestaurantTableWithAssignment> {
+  const result = await query<RestaurantTableWithAssignment>(
+    'SELECT id, restaurant_id, table_number, qr_token, assigned_waiter_id FROM "table" WHERE id = $1 AND restaurant_id = $2',
+    [tableId, restaurantId],
+  );
+  const table = result.rows[0];
+  if (!table) {
+    throw new NotFoundError('Table not found');
+  }
+  return table;
+}
+
 /**
  * Finds the currently active session for a table, or opens a new one.
  * Runs inside a transaction with a row lock scope on the table to avoid a
@@ -162,6 +185,47 @@ export async function assignNextWaiterRoundRobin(restaurantId: string, tableId: 
   }
 }
 
+/**
+ * Assigns a table directly to a specific waiter, no round robin -- used
+ * when a waiter places a staff-assisted order for a customer without a
+ * QR-capable phone (orders.service.ts's placeStaffOrder): the waiter
+ * placing the order is already standing at the table, so they should get
+ * it rather than whoever round robin would otherwise pick. A no-op if
+ * already assigned (to anyone) -- callers only invoke this when they've
+ * already confirmed the table is unassigned.
+ */
+export async function assignWaiterDirectly(tableId: string, waiterId: string): Promise<void> {
+  await query('UPDATE "table" SET assigned_waiter_id = $1, assigned_at = now() WHERE id = $2', [waiterId, tableId]);
+}
+
+export interface IdleTable {
+  id: string;
+  table_number: string;
+}
+
+/**
+ * Tables with no active/awaiting_payment session -- i.e. a customer
+ * hasn't scanned the QR (or one never went out) and no order exists yet.
+ * These never show up in listActiveTableSessionsForRestaurant, which
+ * only lists existing sessions -- a waiter starting a staff-assisted
+ * order for a walk-in with no QR-capable phone needs this list instead,
+ * since there's no session to have appeared under yet.
+ */
+export async function listIdleTablesForRestaurant(restaurantId: string): Promise<IdleTable[]> {
+  const result = await query<IdleTable>(
+    `SELECT t.id, t.table_number
+     FROM "table" t
+     WHERE t.restaurant_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM table_session ts
+         WHERE ts.table_id = t.id AND ts.status IN ('active', 'awaiting_payment')
+       )
+     ORDER BY t.table_number`,
+    [restaurantId],
+  );
+  return result.rows;
+}
+
 /** Looks up who's currently assigned to a table -- used at broadcast time. */
 export async function findAssignedWaiterForTable(tableId: string): Promise<string | null> {
   const result = await query<{ assigned_waiter_id: string | null }>(
@@ -214,6 +278,7 @@ export interface WaiterOrder {
 export interface WaiterTableSession {
   session_id: string;
   session_status: 'active' | 'awaiting_payment' | 'closed';
+  table_id: string;
   table_number: string;
   opened_at: string;
   assigned_waiter_id: string | null;
@@ -235,11 +300,12 @@ export async function listActiveTableSessionsForRestaurant(
   const sessions = await query<{
     session_id: string;
     session_status: WaiterTableSession['session_status'];
+    table_id: string;
     table_number: string;
     opened_at: string;
     assigned_waiter_id: string | null;
   }>(
-    `SELECT ts.id AS session_id, ts.status AS session_status, t.table_number, ts.opened_at, t.assigned_waiter_id
+    `SELECT ts.id AS session_id, ts.status AS session_status, t.id AS table_id, t.table_number, ts.opened_at, t.assigned_waiter_id
      FROM table_session ts
      JOIN "table" t ON t.id = ts.table_id
      WHERE t.restaurant_id = $1 AND ts.status IN ('active', 'awaiting_payment')

@@ -353,6 +353,38 @@ Set locally via `.env`'s `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/
 else (see "Deploying for real" — and its warning about `data-stack.ts`
 template changes wiping this secret's other fields).
 
+### Staff-assisted ordering
+
+Not every customer can scan a QR code themselves (no smartphone, dead
+battery, etc), but the kitchen/bar/waiter dashboards and notification
+pipeline shouldn't need to know or care how an order got created — so a
+waiter can place one on a customer's behalf from their own dashboard
+(`POST /staff/tables/:tableId/orders`, `placeStaffOrder` in
+`orders.service.ts`), sharing the same menu-validation/insert/notify/
+broadcast logic as the customer-facing endpoint (factored out into
+`createOrderForTable`). `contact_value`/`contact_channel` are still
+required exactly like a customer order, unchanged validation — the
+customer's own phone/email if they have one, otherwise any working
+contact the waiter enters (their own, or the restaurant's); nothing
+downstream needs to know which case it is.
+
+Two differences from the customer path, both about waiter assignment:
+- **A staff-placed order on an unassigned table skips round robin** when
+  a *waiter* places it — they're already standing at the table, so they
+  get it directly (`assignWaiterDirectly`) rather than the lottery
+  potentially handing it to someone else. An *admin* placing one still
+  goes through round robin, same as a customer order, since admin has no
+  table of their own to claim it onto.
+- **Only the table's own assigned waiter can place a staff order for it**
+  (`ForbiddenError` otherwise) — same ownership rule as closing a session.
+
+A table with no session yet (customer hasn't scanned, or can't) doesn't
+appear in the normal waiter view at all, so there's a separate
+`GET /staff/idle-tables` list (tables with no active/awaiting_payment
+session) feeding a "Start a table" picker in the UI —
+`findOrCreateActiveSession` inside `createOrderForTable` creates the
+session on the fly, same as it would for a customer's first scan.
+
 ## Local setup
 
 ```bash

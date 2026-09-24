@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
-import type { WaiterTableSession } from '../../api/types';
+import type { IdleTable, WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
+import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -9,14 +10,20 @@ import { usePushSubscription } from '../../hooks/usePushSubscription';
 export function WaiterPage() {
   const { session } = useAuth();
   const [sessions, setSessions] = useState<WaiterTableSession[]>([]);
+  const [idleTables, setIdleTables] = useState<IdleTable[]>([]);
   const [error, setError] = useState('');
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
+  const [startTableId, setStartTableId] = useState('');
   const push = usePushSubscription();
 
   const load = useCallback(() => {
     apiFetch<{ table_sessions: WaiterTableSession[] }>('/staff/tables', { auth: true })
       .then((data) => setSessions(data.table_sessions))
       .catch((err: ApiError) => setError(err.message));
+    apiFetch<{ tables: IdleTable[] }>('/staff/idle-tables', { auth: true })
+      .then((data) => setIdleTables(data.tables))
+      .catch(() => {});
   }, []);
 
   useEffect(load, [load]);
@@ -51,7 +58,38 @@ export function WaiterPage() {
           </button>
         </div>
       )}
-      {sessions.length === 0 && <div className="empty-state">No active tables.</div>}
+      {idleTables.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Start a table</h3>
+          <p className="sub">
+            For a customer who can't scan the QR code themselves -- pick their table and take the order here.
+          </p>
+          <div className="grid-2">
+            <select value={startTableId} onChange={(e) => setStartTableId(e.target.value)}>
+              <option value="">Select a table…</option>
+              {idleTables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  Table {t.table_number}
+                </option>
+              ))}
+            </select>
+            <button
+              className="secondary"
+              disabled={!startTableId}
+              onClick={() => {
+                setTakingOrderForTableId(startTableId);
+                setStartTableId('');
+              }}
+            >
+              Take order
+            </button>
+          </div>
+          {takingOrderForTableId && idleTables.some((t) => t.id === takingOrderForTableId) && (
+            <TakeOrderPanel tableId={takingOrderForTableId} onOrderPlaced={() => { setTakingOrderForTableId(null); load(); }} />
+          )}
+        </div>
+      )}
+      {sessions.length === 0 && idleTables.length === 0 && <div className="empty-state">No tables yet.</div>}
       {sessions.map((ts) => (
         <div key={ts.session_id} className="table-block">
           <div className="top-bar">
@@ -59,10 +97,27 @@ export function WaiterPage() {
               Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>{' '}
               {!ts.assigned_waiter_id && <span className="status-pill">unassigned</span>}
             </h3>
-            <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => closeTable(ts.session_id)}>
-              Close table
-            </button>
+            <div>
+              <button
+                className="secondary"
+                onClick={() => setTakingOrderForTableId(takingOrderForTableId === ts.table_id ? null : ts.table_id)}
+              >
+                {takingOrderForTableId === ts.table_id ? 'Cancel' : 'Take order'}
+              </button>{' '}
+              <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => closeTable(ts.session_id)}>
+                Close table
+              </button>
+            </div>
           </div>
+          {takingOrderForTableId === ts.table_id && (
+            <TakeOrderPanel
+              tableId={ts.table_id}
+              onOrderPlaced={() => {
+                setTakingOrderForTableId(null);
+                load();
+              }}
+            />
+          )}
           {/* Each Order is its own block, never merged -- orders at the
               same table are billed independently. */}
           {ts.orders.map((order) => (

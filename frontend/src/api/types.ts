@@ -74,6 +74,7 @@ export interface WaiterOrder {
 export interface WaiterTableSession {
   session_id: string;
   session_status: 'active' | 'awaiting_payment' | 'closed';
+  table_id: string;
   table_number: string;
   opened_at: string;
   assigned_waiter_id: string | null;
@@ -122,4 +123,9 @@ export interface RestaurantSignupResponse {
 
 export interface VapidPublicKeyResponse {
   publicKey: string;
+}
+
+export interface IdleTable {
+  id: string;
+  table_number: string;
 }
