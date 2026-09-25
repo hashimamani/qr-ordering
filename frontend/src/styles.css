@@ -373,3 +373,25 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
 @keyframes cart-bar-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
 .cart-total-row { font-weight: 700; font-size: 15px; border-top: 1px solid var(--ink-200); margin-top: 6px; padding-top: 12px; }
+
+/* Toasts -- transient snackbar-style notifications, replacing inline
+   error banners. Sit above everything (dialogs included) since an action
+   failure inside a dialog still needs to be seen. */
+.toast-stack {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 300; display: flex; flex-direction: column; gap: 8px;
+  align-items: center; width: 100%; max-width: 420px; padding: 0 16px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto; cursor: pointer; width: 100%;
+  background: var(--ink-800); color: white; padding: 12px 16px; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 500; line-height: 1.4; box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; gap: 10px;
+  animation: toast-in 0.2s ease;
+}
+.toast::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.toast-error { background: var(--red-600); }
+.toast-success { background: var(--green-700); }
+.toast-info { background: var(--ink-800); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }

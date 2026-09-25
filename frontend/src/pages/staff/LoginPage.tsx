@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { LoginResponse, StaffRole } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
+import { useToast } from '../../components/ToastProvider';
 
 const ROLE_DESTINATION: Record<StaffRole, string> = {
   admin: '/admin',
@@ -14,15 +15,14 @@ const ROLE_DESTINATION: Record<StaffRole, string> = {
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const showToast = useToast();
   const [slug, setSlug] = useState('amani-grill');
   const [contact, setContact] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function submit() {
     setLoading(true);
-    setError('');
     try {
       const result = await apiFetch<LoginResponse>('/staff/login', {
         method: 'POST',
@@ -31,7 +31,7 @@ export function LoginPage() {
       login(result.token, result.name);
       navigate(ROLE_DESTINATION[result.role]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,6 @@ export function LoginPage() {
         <div className="sub">Staff login</div>
       </header>
       <main className="auth">
-        {error && <div className="error-banner">{error}</div>}
         <div className="card">
           <label htmlFor="slug">Restaurant slug</label>
           <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} />

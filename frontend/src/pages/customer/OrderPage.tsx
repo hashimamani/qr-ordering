@@ -3,15 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { ResolveTableResponse, PlaceOrderResponse } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
+import { useToast } from '../../components/ToastProvider';
 
 export function OrderPage() {
   const [params] = useSearchParams();
   const slug = params.get('slug');
   const qrToken = params.get('t');
   const navigate = useNavigate();
+  const showToast = useToast();
 
   const [data, setData] = useState<ResolveTableResponse | null>(null);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   const [channel, setChannel] = useState<'sms' | 'email'>('sms');
   const [contact, setContact] = useState('');
@@ -20,12 +22,12 @@ export function OrderPage() {
 
   useEffect(() => {
     if (!slug || !qrToken) {
-      setError('Missing ?slug= and ?t= in the URL.');
+      setLoadError('Missing ?slug= and ?t= in the URL.');
       return;
     }
     apiFetch<ResolveTableResponse>(`/r/${slug}/t/${qrToken}`)
       .then(setData)
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, [slug, qrToken]);
 
   const itemsByCategory = useMemo(() => {
@@ -53,11 +55,10 @@ export function OrderPage() {
 
   async function submitOrder() {
     if (!slug || !qrToken || !contact.trim()) {
-      setError('Enter a contact number or email so we can send your tracking link.');
+      showToast('Enter a contact number or email so we can send your tracking link.');
       return;
     }
     setSubmitting(true);
-    setError('');
     try {
       const items = [...cart.entries()].map(([menu_item_id, quantity]) => ({ menu_item_id, quantity }));
       const result = await apiFetch<PlaceOrderResponse>(`/r/${slug}/t/${qrToken}/orders`, {
@@ -66,7 +67,7 @@ export function OrderPage() {
       });
       navigate(`/track/${result.public_token}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
       setSubmitting(false);
     }
   }
@@ -80,7 +81,7 @@ export function OrderPage() {
         </div>
       </header>
       <main>
-        {error && <div className="error-banner">{error}</div>}
+        {loadError && <div className="error-banner">{loadError}</div>}
 
         {data?.menu.categories.map((category) => {
           const items = itemsByCategory.get(category.id) ?? [];

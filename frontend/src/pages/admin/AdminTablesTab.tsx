@@ -5,6 +5,7 @@ import type { AdminTable, CreatedTableWithQr, StaffUserSummary } from '../../api
 import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
+import { useToast } from '../../components/ToastProvider';
 import { QrCodeIcon, TrashIcon, UsersIcon } from '../../components/icons';
 
 // The frontend's own origin is the customer ordering base -- this static
@@ -14,9 +15,10 @@ function orderingUrlFor(slug: string, qrToken: string): string {
 }
 
 export function AdminTablesTab() {
+  const showToast = useToast();
   const [tables, setTables] = useState<AdminTable[]>([]);
   const [restaurantSlug, setRestaurantSlug] = useState('');
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [newTableNumber, setNewTableNumber] = useState('');
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<CreatedTableWithQr | null>(null);
@@ -38,7 +40,7 @@ export function AdminTablesTab() {
         setTables(data.tables);
         setRestaurantSlug(data.restaurant_slug);
       })
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
     apiFetch<{ staff: StaffUserSummary[] }>('/admin/staff', { auth: true })
       .then((data) => setWaiters(data.staff.filter((s) => s.role === 'waiter')))
       .catch(() => {});
@@ -49,13 +51,11 @@ export function AdminTablesTab() {
   function openReassign(table: AdminTable) {
     setReassignTarget(table);
     setReassignChoice('');
-    setError('');
   }
 
   async function doReassign() {
     if (!reassignTarget || !reassignChoice) return;
     setReassigning(true);
-    setError('');
     try {
       await apiFetch(`/admin/tables/${reassignTarget.id}`, {
         method: 'PATCH',
@@ -65,7 +65,7 @@ export function AdminTablesTab() {
       setReassignTarget(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setReassigning(false);
     }
@@ -96,7 +96,6 @@ export function AdminTablesTab() {
     if (!confirmRegenerate) return;
     const tableId = confirmRegenerate.id;
     setRegeneratingId(tableId);
-    setError('');
     try {
       await apiFetch(`/admin/tables/${tableId}/regenerate-qr`, { method: 'POST', auth: true });
       setQrPreviews((prev) => {
@@ -107,7 +106,7 @@ export function AdminTablesTab() {
       setConfirmRegenerate(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setRegeneratingId(null);
     }
@@ -116,13 +115,12 @@ export function AdminTablesTab() {
   async function doRemoveTable() {
     if (!confirmRemove) return;
     setRemoveBusy(true);
-    setError('');
     try {
       await apiFetch(`/admin/tables/${confirmRemove.id}`, { method: 'DELETE', auth: true });
       setConfirmRemove(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setRemoveBusy(false);
     }
@@ -131,7 +129,6 @@ export function AdminTablesTab() {
   async function createTable() {
     if (!newTableNumber.trim()) return;
     setCreating(true);
-    setError('');
     try {
       const result = await apiFetch<CreatedTableWithQr>('/admin/tables', {
         method: 'POST',
@@ -142,7 +139,7 @@ export function AdminTablesTab() {
       setNewTableNumber('');
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setCreating(false);
     }
@@ -150,7 +147,7 @@ export function AdminTablesTab() {
 
   return (
     <div>
-      {error && <div className="error-banner">{error}</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Add table</h3>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
 import type { DashboardTable, Destination, OrderItemStatus } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
+import { useToast } from '../../components/ToastProvider';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 
@@ -18,14 +19,15 @@ const NEXT_LABEL: Partial<Record<OrderItemStatus, string>> = {
 
 export function DestinationDashboardPage({ destination, title }: { destination: Destination; title: string }) {
   const { session } = useAuth();
+  const showToast = useToast();
   const [tables, setTables] = useState<DashboardTable[]>([]);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiFetch<{ tables: DashboardTable[] }>(`/staff/${destination}`, { auth: true })
       .then((data) => setTables(data.tables))
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, [destination]);
 
   useEffect(load, [load]);
@@ -46,7 +48,7 @@ export function DestinationDashboardPage({ destination, title }: { destination: 
       });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setPendingId(null);
     }
@@ -54,7 +56,7 @@ export function DestinationDashboardPage({ destination, title }: { destination: 
 
   return (
     <StaffLayout title={title} connected={connected}>
-      {error && <div className="error-banner">{error}</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
       {tables.length === 0 && <div className="empty-state">No {destination} items waiting.</div>}
       {tables.map((table) => (
         <div key={table.table_number} className="table-block">

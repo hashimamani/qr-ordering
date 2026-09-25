@@ -4,15 +4,17 @@ import type { IdleTable, WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
 import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useToast } from '../../components/ToastProvider';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
 
 export function WaiterPage() {
   const { session } = useAuth();
+  const showToast = useToast();
   const [sessions, setSessions] = useState<WaiterTableSession[]>([]);
   const [idleTables, setIdleTables] = useState<IdleTable[]>([]);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [closingId, setClosingId] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
   const [servingId, setServingId] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export function WaiterPage() {
   const load = useCallback(() => {
     apiFetch<{ table_sessions: WaiterTableSession[] }>('/staff/tables', { auth: true })
       .then((data) => setSessions(data.table_sessions))
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
     apiFetch<{ tables: IdleTable[] }>('/staff/idle-tables', { auth: true })
       .then((data) => setIdleTables(data.tables))
       .catch(() => {});
@@ -47,7 +49,7 @@ export function WaiterPage() {
       setConfirmClose(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setClosingId(null);
     }
@@ -55,7 +57,6 @@ export function WaiterPage() {
 
   async function markServed(orderItemId: string) {
     setServingId(orderItemId);
-    setError('');
     try {
       await apiFetch(`/staff/order-items/${orderItemId}/status`, {
         method: 'PATCH',
@@ -64,7 +65,7 @@ export function WaiterPage() {
       });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setServingId(null);
     }
@@ -72,12 +73,11 @@ export function WaiterPage() {
 
   async function markPaid(publicToken: string) {
     setPayingToken(publicToken);
-    setError('');
     try {
       await apiFetch(`/staff/orders/${publicToken}/payment-status`, { method: 'PATCH', auth: true });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setPayingToken(null);
     }
@@ -85,10 +85,9 @@ export function WaiterPage() {
 
   return (
     <StaffLayout title="Waiter" connected={connected}>
-      {error && <div className="error-banner">{error}</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
       {session?.role === 'waiter' && push.status !== 'enabled' && (
         <div className="card" style={{ marginBottom: 16 }}>
-          {push.error && <div className="error-banner">{push.error}</div>}
           <button className="secondary" disabled={push.status === 'enabling'} onClick={push.enable}>
             {push.status === 'enabling' ? 'Enabling…' : 'Enable notifications'}
           </button>

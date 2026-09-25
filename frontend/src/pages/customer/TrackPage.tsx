@@ -3,14 +3,16 @@ import { useParams } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { TrackedOrder } from '../../api/types';
 import { StatusPill } from '../../components/StatusPill';
+import { useToast } from '../../components/ToastProvider';
 import { useRealtime } from '../../hooks/useRealtime';
 
 const CALL_WAITER_COOLDOWN_MS = 30_000;
 
 export function TrackPage() {
   const { token } = useParams<{ token: string }>();
+  const showToast = useToast();
   const [order, setOrder] = useState<TrackedOrder | null>(null);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [calling, setCalling] = useState(false);
   const [calledAt, setCalledAt] = useState<number | null>(null);
 
@@ -18,7 +20,7 @@ export function TrackPage() {
     if (!token) return;
     apiFetch<TrackedOrder>(`/track/${token}`)
       .then(setOrder)
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, [token]);
 
   useEffect(load, [load]);
@@ -30,12 +32,11 @@ export function TrackPage() {
   async function callWaiter() {
     if (!token || calling || onCooldown) return;
     setCalling(true);
-    setError('');
     try {
       await apiFetch(`/track/${token}/call-waiter`, { method: 'POST' });
       setCalledAt(Date.now());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setCalling(false);
     }
@@ -53,7 +54,7 @@ export function TrackPage() {
         {order && <div className="sub">Placed {new Date(order.submitted_at).toLocaleTimeString()}</div>}
       </header>
       <main>
-        {error && <div className="error-banner">{error}</div>}
+        {loadError && <div className="error-banner">{loadError}</div>}
         <div className="card" style={{ marginBottom: 16 }}>
           <button className="secondary" disabled={calling || onCooldown} onClick={callWaiter}>
             {onCooldown ? 'Waiter has been notified' : calling ? 'Calling…' : 'Call waiter'}

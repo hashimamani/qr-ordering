@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
 import type { MenuCategory, MenuItem, PlaceOrderResponse } from '../api/types';
+import { useToast } from './ToastProvider';
 
 interface StaffMenuResponse {
   categories: MenuCategory[];
@@ -17,8 +18,9 @@ interface StaffMenuResponse {
  * restaurant's).
  */
 export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; onOrderPlaced: () => void }) {
+  const showToast = useToast();
   const [menu, setMenu] = useState<StaffMenuResponse | null>(null);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Map<string, number>>(new Map());
   const [channel, setChannel] = useState<'sms' | 'email'>('sms');
   const [contact, setContact] = useState('');
@@ -27,7 +29,7 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
   useEffect(() => {
     apiFetch<StaffMenuResponse>('/staff/menu', { auth: true })
       .then(setMenu)
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, []);
 
   const itemsByCategory = useMemo(() => {
@@ -52,11 +54,10 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
 
   async function submitOrder() {
     if (!contact.trim()) {
-      setError('A contact (the customer’s, yours, or the restaurant’s) is required.');
+      showToast('A contact (the customer’s, yours, or the restaurant’s) is required.');
       return;
     }
     setSubmitting(true);
-    setError('');
     try {
       const items = [...cart.entries()].map(([menu_item_id, quantity]) => ({ menu_item_id, quantity }));
       await apiFetch<PlaceOrderResponse>(`/staff/tables/${tableId}/orders`, {
@@ -68,7 +69,7 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
       setContact('');
       onOrderPlaced();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setSubmitting(false);
     }
@@ -76,8 +77,8 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
 
   return (
     <div className="card">
-      {error && <div className="error-banner">{error}</div>}
-      {!menu && !error && <div className="sub">Loading menu…</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
+      {!menu && !loadError && <div className="sub">Loading menu…</div>}
       {menu?.categories.map((category) => {
         const items = itemsByCategory.get(category.id) ?? [];
         if (items.length === 0) return null;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
 import type { VapidPublicKeyResponse } from '../api/types';
+import { useToast } from '../components/ToastProvider';
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -17,12 +18,11 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
  * unsolicited permission prompts.
  */
 export function usePushSubscription() {
+  const showToast = useToast();
   const [status, setStatus] = useState<'idle' | 'enabling' | 'enabled' | 'error'>('idle');
-  const [error, setError] = useState('');
 
   async function enable() {
     setStatus('enabling');
-    setError('');
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         throw new Error('Push notifications are not supported in this browser.');
@@ -40,10 +40,10 @@ export function usePushSubscription() {
       await apiFetch('/staff/push/subscribe', { method: 'POST', auth: true, body: subscription.toJSON() });
       setStatus('enabled');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Something went wrong.');
       setStatus('error');
     }
   }
 
-  return { status, error, enable };
+  return { status, enable };
 }

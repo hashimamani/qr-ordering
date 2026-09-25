@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
+import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
 
 interface EditState {
@@ -16,8 +17,9 @@ interface EditState {
 
 export function AdminStaffTab() {
   const { session } = useAuth();
+  const showToast = useToast();
   const [staff, setStaff] = useState<StaffUserSummary[]>([]);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', role: 'waiter' as StaffRole, phone_or_email: '', password: '' });
   const [editing, setEditing] = useState<StaffUserSummary | null>(null);
@@ -29,18 +31,17 @@ export function AdminStaffTab() {
   const load = useCallback(() => {
     apiFetch<{ staff: StaffUserSummary[] }>('/admin/staff', { auth: true })
       .then((data) => setStaff(data.staff))
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, []);
 
   useEffect(load, [load]);
 
   async function addStaff() {
     if (!form.name.trim() || !form.phone_or_email.trim() || form.password.length < 8) {
-      setError('Name, contact, and an 8+ character password are all required.');
+      showToast('Name, contact, and an 8+ character password are all required.');
       return;
     }
     setCreating(true);
-    setError('');
     try {
       await apiFetch('/admin/staff', {
         method: 'POST',
@@ -50,7 +51,7 @@ export function AdminStaffTab() {
       setForm({ name: '', role: 'waiter', phone_or_email: '', password: '' });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setCreating(false);
     }
@@ -59,21 +60,19 @@ export function AdminStaffTab() {
   function startEdit(s: StaffUserSummary) {
     setEditing(s);
     setEditForm({ name: s.name, role: s.role, phone_or_email: s.phone_or_email, password: '' });
-    setError('');
   }
 
   async function saveEdit() {
     if (!editing || !editForm) return;
     if (!editForm.name.trim() || !editForm.phone_or_email.trim()) {
-      setError('Name and contact are required.');
+      showToast('Name and contact are required.');
       return;
     }
     if (editForm.password && editForm.password.length < 8) {
-      setError('A new password needs 8+ characters -- leave it blank to keep the current one.');
+      showToast('A new password needs 8+ characters -- leave it blank to keep the current one.');
       return;
     }
     setSaving(true);
-    setError('');
     try {
       const body: Record<string, unknown> = {
         name: editForm.name.trim(),
@@ -86,7 +85,7 @@ export function AdminStaffTab() {
       setEditForm(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setSaving(false);
     }
@@ -95,13 +94,12 @@ export function AdminStaffTab() {
   async function confirmRemove() {
     if (!removing) return;
     setRemoveBusy(true);
-    setError('');
     try {
       await apiFetch(`/admin/staff/${removing.id}`, { method: 'DELETE', auth: true });
       setRemoving(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setRemoveBusy(false);
     }
@@ -109,7 +107,7 @@ export function AdminStaffTab() {
 
   return (
     <div>
-      {error && <div className="error-banner">{error}</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Add staff login</h3>

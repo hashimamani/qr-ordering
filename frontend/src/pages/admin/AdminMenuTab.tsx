@@ -4,12 +4,14 @@ import type { MenuCategory, MenuItem, Destination } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
+import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
 
 export function AdminMenuTab() {
+  const showToast = useToast();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newItem, setNewItem] = useState({
@@ -31,7 +33,7 @@ export function AdminMenuTab() {
         setCategories(data.categories);
         setItems(data.items);
       })
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, []);
 
   useEffect(load, [load]);
@@ -47,7 +49,7 @@ export function AdminMenuTab() {
       setNewCategoryName('');
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     }
   }
 
@@ -59,7 +61,7 @@ export function AdminMenuTab() {
       setDeleteCategoryTarget(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setDeleteBusy(false);
     }
@@ -83,7 +85,7 @@ export function AdminMenuTab() {
       setNewItem({ category_id: newItem.category_id, name: '', description: '', price: '', destination: newItem.destination });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     }
   }
 
@@ -96,7 +98,7 @@ export function AdminMenuTab() {
       });
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     }
   }
 
@@ -117,7 +119,7 @@ export function AdminMenuTab() {
       setEditingItem(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setSaving(false);
     }
@@ -131,7 +133,7 @@ export function AdminMenuTab() {
       setDeleteItemTarget(null);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setDeleteBusy(false);
     }
@@ -139,7 +141,7 @@ export function AdminMenuTab() {
 
   return (
     <div>
-      {error && <div className="error-banner">{error}</div>}
+      {loadError && <div className="error-banner">{loadError}</div>}
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Add category</h3>

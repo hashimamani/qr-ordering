@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { RestaurantAdmin, RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
 import { usePlatformAdminAuth } from '../../auth/PlatformAdminAuthContext';
+import { useToast } from '../../components/ToastProvider';
 
 const EMPTY_FORM = {
   restaurant_name: '',
@@ -15,8 +16,9 @@ const EMPTY_FORM = {
 export function PlatformAdminDashboardPage() {
   const { session, logout } = usePlatformAdminAuth();
   const navigate = useNavigate();
+  const showToast = useToast();
   const [restaurants, setRestaurants] = useState<RestaurantSummary[]>([]);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [managingRestaurantId, setManagingRestaurantId] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function PlatformAdminDashboardPage() {
     if (!session) return;
     apiFetch<{ restaurants: RestaurantSummary[] }>('/platform-admin/restaurants', { authToken: session.token })
       .then((data) => setRestaurants(data.restaurants))
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => setLoadError(err.message));
   }, [session]);
 
   useEffect(load, [load]);
@@ -48,17 +50,16 @@ export function PlatformAdminDashboardPage() {
       authToken: session!.token,
     })
       .then((data) => setAdmins(data.admins))
-      .catch((err: ApiError) => setError(err.message));
+      .catch((err: ApiError) => showToast(err.message));
   }
 
   async function resetPassword(staffId: string) {
     const password = resetPasswords[staffId] ?? '';
     if (password.length < 8) {
-      setError('New password needs 8+ characters.');
+      showToast('New password needs 8+ characters.');
       return;
     }
     setResettingId(staffId);
-    setError('');
     try {
       await apiFetch(`/platform-admin/staff/${staffId}/password`, {
         method: 'PATCH',
@@ -68,7 +69,7 @@ export function PlatformAdminDashboardPage() {
       setResetPasswords((prev) => ({ ...prev, [staffId]: '' }));
       setResetDoneId(staffId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setResettingId(null);
     }
@@ -82,11 +83,10 @@ export function PlatformAdminDashboardPage() {
       !form.admin_phone_or_email.trim() ||
       form.admin_password.length < 8
     ) {
-      setError('All fields are required, and the admin password needs 8+ characters.');
+      showToast('All fields are required, and the admin password needs 8+ characters.');
       return;
     }
     setCreating(true);
-    setError('');
     try {
       await apiFetch<RestaurantSignupResponse>('/platform-admin/restaurants', {
         method: 'POST',
@@ -102,7 +102,7 @@ export function PlatformAdminDashboardPage() {
       setForm(EMPTY_FORM);
       load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setCreating(false);
     }
@@ -126,7 +126,7 @@ export function PlatformAdminDashboardPage() {
         <div className="sub">{session.name}</div>
       </header>
       <main>
-        {error && <div className="error-banner">{error}</div>}
+        {loadError && <div className="error-banner">{loadError}</div>}
 
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Onboard a new restaurant</h3>
