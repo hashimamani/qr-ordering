@@ -240,6 +240,7 @@ export interface TableContext {
   restaurant_id: string;
   table_id: string;
   table_number: string;
+  table_session_id: string;
   assigned_waiter_id: string | null;
 }
 
@@ -251,7 +252,7 @@ export interface TableContext {
  */
 export async function findTableContextByPublicToken(publicToken: string): Promise<TableContext> {
   const result = await query<TableContext>(
-    `SELECT t.restaurant_id, t.id AS table_id, t.table_number, t.assigned_waiter_id
+    `SELECT t.restaurant_id, t.id AS table_id, t.table_number, ts.id AS table_session_id, t.assigned_waiter_id
      FROM "order" o
      JOIN table_session ts ON ts.id = o.table_session_id
      JOIN "table" t ON t.id = ts.table_id
@@ -261,6 +262,28 @@ export async function findTableContextByPublicToken(publicToken: string): Promis
   const context = result.rows[0];
   if (!context) throw new NotFoundError('Order not found');
   return context;
+}
+
+/** Flags the table session as actively calling for a waiter -- set on
+ * every call-waiter press (including repeats, so the timestamp reflects
+ * the most recent press) and cleared only when a waiter explicitly
+ * acknowledges it (see acknowledgeTableCalling), not automatically by
+ * any other action -- the point is a persistent reminder that survives
+ * until someone actually deals with it. */
+export async function markTableCalling(tableSessionId: string): Promise<void> {
+  await query('UPDATE table_session SET calling_since = now() WHERE id = $1', [tableSessionId]);
+}
+
+export async function acknowledgeTableCalling(restaurantId: string, tableSessionId: string): Promise<void> {
+  const result = await query(
+    `UPDATE table_session ts SET calling_since = NULL
+     FROM "table" t
+     WHERE ts.id = $1 AND ts.table_id = t.id AND t.restaurant_id = $2`,
+    [tableSessionId, restaurantId],
+  );
+  if (result.rowCount === 0) {
+    throw new NotFoundError('Table session not found');
+  }
 }
 
 export interface WaiterOrderItem {
@@ -286,6 +309,7 @@ export interface WaiterTableSession {
   opened_at: string;
   assigned_waiter_id: string | null;
   assigned_waiter_name: string | null;
+  calling_since: string | null;
   orders: WaiterOrder[];
 }
 
@@ -312,9 +336,10 @@ export async function listActiveTableSessionsForRestaurant(
     opened_at: string;
     assigned_waiter_id: string | null;
     assigned_waiter_name: string | null;
+    calling_since: string | null;
   }>(
     `SELECT ts.id AS session_id, ts.status AS session_status, t.id AS table_id, t.table_number, ts.opened_at,
-            t.assigned_waiter_id, s.name AS assigned_waiter_name
+            t.assigned_waiter_id, s.name AS assigned_waiter_name, ts.calling_since
      FROM table_session ts
      JOIN "table" t ON t.id = ts.table_id
      LEFT JOIN staff_user s ON s.id = t.assigned_waiter_id

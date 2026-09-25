@@ -4,6 +4,7 @@ import {
   findOrCreateActiveSession,
   listActiveTableSessionsForRestaurant,
   closeTableSession,
+  acknowledgeTableCalling,
   type WaiterTableSession,
 } from './tables.repository';
 import { listMenuForRestaurant } from '../menu/menu.repository';
@@ -68,4 +69,8 @@ export async function closeSession(
       table_session_id: sessionId,
     });
   }
+}
+
+export async function acknowledgeCall(restaurantId: string, sessionId: string): Promise<void> {
+  await acknowledgeTableCalling(restaurantId, sessionId);
 }

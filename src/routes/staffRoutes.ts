@@ -6,7 +6,7 @@ import { requireStaffAuth, requireRole } from '../middleware/staffAuth';
 import { loginStaff } from '../modules/staff/staff.service';
 import { staffLoginSchema, pushSubscribeSchema } from '../modules/staff/staff.validation';
 import { getQueueForDestination, updateOrderItemStatus } from '../modules/orderItems/orderItems.service';
-import { getWaiterView, closeSession } from '../modules/tables/tables.service';
+import { getWaiterView, closeSession, acknowledgeCall } from '../modules/tables/tables.service';
 import { listIdleTablesForRestaurant } from '../modules/tables/tables.repository';
 import { upsertPushSubscription } from '../modules/push/push.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
@@ -176,6 +176,20 @@ staffRoutes.patch(
   requireRole('admin', 'waiter'),
   asyncHandler(async (req, res) => {
     await closeSession(req.staff!.restaurantId, req.params.id, { id: req.staff!.sub, role: req.staff!.role });
+    res.status(204).send();
+  }),
+);
+
+// Clears the persistent "customer is calling" flag a call-waiter press
+// sets -- deliberately a separate explicit action, not cleared by any
+// other table activity, so it stays visible until someone actually
+// acknowledges it.
+staffRoutes.patch(
+  '/staff/table-sessions/:id/acknowledge-call',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    await acknowledgeCall(req.staff!.restaurantId, req.params.id);
     res.status(204).send();
   }),
 );

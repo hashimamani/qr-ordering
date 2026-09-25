@@ -6,7 +6,11 @@ import { resolveTableForOrdering } from '../modules/tables/tables.service';
 import { placeOrder } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
 import { findOrderByPublicToken } from '../modules/tracking/tracking.repository';
-import { findTableContextByPublicToken, assignNextWaiterRoundRobin } from '../modules/tables/tables.repository';
+import {
+  findTableContextByPublicToken,
+  assignNextWaiterRoundRobin,
+  markTableCalling,
+} from '../modules/tables/tables.repository';
 import { broadcastToTableWaiter } from '../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../realtime/webPush';
 
@@ -54,6 +58,7 @@ customerRoutes.post(
     if (!assignedWaiterId) {
       assignedWaiterId = await assignNextWaiterRoundRobin(context.restaurant_id, context.table_id);
     }
+    await markTableCalling(context.table_session_id);
     await broadcastToTableWaiter(context.restaurant_id, context.table_id, {
       type: 'call_waiter',
       table_number: context.table_number,

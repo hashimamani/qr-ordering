@@ -233,6 +233,24 @@ label { font-size: 13px; color: var(--ink-600); font-weight: 600; display: block
   border-top: 1px solid var(--ink-100);
 }
 
+/* Persistent "customer is calling" alert -- stays until acknowledged, not
+   auto-cleared by other activity, so it can't get lost in a long list of
+   tables the way a one-off toast or push notification can. */
+.calling-alert {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--red-50); border: 1px solid #fecaca; color: var(--red-700);
+  padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 10px;
+  font-size: 13px; font-weight: 700;
+  animation: calling-pulse 1.8s ease-in-out infinite;
+}
+.calling-alert-text { display: inline-flex; align-items: center; gap: 8px; }
+.calling-alert button.ghost { color: var(--red-700); flex-shrink: 0; }
+.calling-alert button.ghost:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
+@keyframes calling-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.28); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
 .error-banner {
   background: var(--red-50); color: var(--red-700); padding: 12px 16px; border-radius: var(--radius-sm);
   margin-bottom: 14px; font-size: 14px; font-weight: 500; border: 1px solid #fecaca;

@@ -89,6 +89,7 @@ export interface WaiterTableSession {
   opened_at: string;
   assigned_waiter_id: string | null;
   assigned_waiter_name: string | null;
+  calling_since: string | null;
   orders: WaiterOrder[];
 }
 

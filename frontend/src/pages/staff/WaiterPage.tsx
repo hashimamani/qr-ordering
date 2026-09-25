@@ -6,7 +6,7 @@ import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
-import { BanknoteIcon, CheckIcon, ClipboardListIcon, XIcon } from '../../components/icons';
+import { BanknoteIcon, BellIcon, CheckIcon, ClipboardListIcon, XIcon } from '../../components/icons';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -21,6 +21,7 @@ export function WaiterPage() {
   const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
   const [servingId, setServingId] = useState<string | null>(null);
   const [payingToken, setPayingToken] = useState<string | null>(null);
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
   const [startTableId, setStartTableId] = useState('');
   const push = usePushSubscription();
@@ -85,13 +86,33 @@ export function WaiterPage() {
     }
   }
 
+  async function acknowledgeCall(sessionId: string) {
+    setAcknowledgingId(sessionId);
+    try {
+      await apiFetch(`/staff/table-sessions/${sessionId}/acknowledge-call`, { method: 'PATCH', auth: true });
+      load();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setAcknowledgingId(null);
+    }
+  }
+
   return (
     <StaffLayout title="Waiter" connected={connected}>
       {loadError && <div className="error-banner">{loadError}</div>}
-      {session?.role === 'waiter' && push.status !== 'enabled' && (
+      {session?.role === 'waiter' && (push.status === 'denied' || push.status === 'unsupported' || push.status === 'error') && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <button className="secondary" disabled={push.status === 'enabling'} onClick={push.enable}>
-            {push.status === 'enabling' ? 'Enabling…' : 'Enable notifications'}
+          <p className="sub" style={{ marginTop: 0 }}>
+            {push.status === 'denied'
+              ? "Notifications are blocked for this site -- allow them in your browser's settings so you're alerted when a customer needs you."
+              : push.status === 'unsupported'
+                ? "Push notifications aren't supported in this browser."
+                : "Couldn't enable notifications."}
+          </p>
+          <button className="ghost" onClick={push.enable}>
+            <BellIcon size={14} />
+            Try again
           </button>
         </div>
       )}
@@ -129,6 +150,22 @@ export function WaiterPage() {
       {sessions.length === 0 && idleTables.length === 0 && <div className="empty-state">No tables yet.</div>}
       {sessions.map((ts) => (
         <div key={ts.session_id} className="table-block">
+          {ts.calling_since && (
+            <div className="calling-alert">
+              <span className="calling-alert-text">
+                <BellIcon size={16} />
+                Customer is calling
+              </span>
+              <button
+                className="ghost"
+                disabled={acknowledgingId === ts.session_id}
+                onClick={() => acknowledgeCall(ts.session_id)}
+              >
+                <CheckIcon size={14} />
+                {acknowledgingId === ts.session_id ? 'Clearing…' : 'Acknowledge'}
+              </button>
+            </div>
+          )}
           <div className="top-bar">
             <h3>
               Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>{' '}
