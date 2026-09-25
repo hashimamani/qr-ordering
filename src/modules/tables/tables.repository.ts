@@ -218,7 +218,15 @@ export async function listIdleTablesForRestaurant(restaurantId: string): Promise
      WHERE t.restaurant_id = $1
        AND t.removed_at IS NULL
        AND NOT EXISTS (
+         -- A session merely existing doesn't mean the table is "in use" --
+         -- resolveTableForOrdering opens one on every page view, including
+         -- a customer (or staff) just previewing the menu with no order
+         -- ever placed. Only a session that actually has an order should
+         -- block this table from the staff-assisted "start a table" list;
+         -- an order-less active session is functionally identical to no
+         -- session at all from a walk-in-needs-help standpoint.
          SELECT 1 FROM table_session ts
+         JOIN "order" o ON o.table_session_id = ts.id
          WHERE ts.table_id = t.id AND ts.status IN ('active', 'awaiting_payment')
        )
      ORDER BY t.table_number`,
