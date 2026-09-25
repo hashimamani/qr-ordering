@@ -5,15 +5,15 @@ import { StaffLayout } from '../../components/StaffLayout';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 
+// Stops at 'ready' -- marking an item 'served' is the waiter's call, not
+// kitchen/bar's (they're not the ones actually bringing it to the table).
 const NEXT_STATUS: Partial<Record<OrderItemStatus, OrderItemStatus>> = {
   received: 'preparing',
   preparing: 'ready',
-  ready: 'served',
 };
 const NEXT_LABEL: Partial<Record<OrderItemStatus, string>> = {
   received: 'Start preparing',
   preparing: 'Mark ready',
-  ready: 'Mark served',
 };
 
 export function DestinationDashboardPage({ destination, title }: { destination: Destination; title: string }) {

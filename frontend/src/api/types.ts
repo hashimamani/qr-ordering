@@ -64,11 +64,21 @@ export interface DashboardTable {
   items: QueuedOrderItem[];
 }
 
+export interface WaiterOrderItem {
+  order_item_id: string;
+  menu_item_name: string;
+  quantity: number;
+  status: OrderItemStatus;
+}
+
+export type PaymentStatus = 'unpaid' | 'paid';
+
 export interface WaiterOrder {
   public_token: string;
   contact_channel: 'sms' | 'email';
   submitted_at: string;
-  items: { menu_item_name: string; quantity: number; status: OrderItemStatus }[];
+  payment_status: PaymentStatus;
+  items: WaiterOrderItem[];
 }
 
 export interface WaiterTableSession {

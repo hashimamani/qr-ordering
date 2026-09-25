@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../lib/asyncHandler';
-import { ValidationError } from '../lib/errors';
+import { ForbiddenError, ValidationError } from '../lib/errors';
 import { requireStaffAuth, requireRole } from '../middleware/staffAuth';
 import { loginStaff } from '../modules/staff/staff.service';
 import { staffLoginSchema, pushSubscribeSchema } from '../modules/staff/staff.validation';
@@ -10,7 +10,7 @@ import { getWaiterView, closeSession } from '../modules/tables/tables.service';
 import { listIdleTablesForRestaurant } from '../modules/tables/tables.repository';
 import { upsertPushSubscription } from '../modules/push/push.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
-import { placeStaffOrder } from '../modules/orders/orders.service';
+import { placeStaffOrder, markOrderPaid } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
 
 export const staffRoutes = Router();
@@ -136,16 +136,36 @@ const updateStatusSchema = z.object({
   status: z.enum(['preparing', 'ready', 'served']),
 });
 
+// 'served' is the waiter's own call (they're the one who actually serves
+// the table) -- kitchen/bar only ever move an item as far as 'ready'. Kept
+// as one route with a status-dependent role check rather than a blanket
+// requireRole, since which roles are allowed depends on the target status.
 staffRoutes.patch(
   '/staff/order-items/:id/status',
   requireStaffAuth,
-  requireRole('admin', 'kitchen', 'bar'),
   asyncHandler(async (req, res) => {
     const parsed = updateStatusSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new ValidationError('Invalid status payload', parsed.error.flatten());
     }
+    const allowedRoles = parsed.data.status === 'served' ? ['admin', 'waiter'] : ['admin', 'kitchen', 'bar'];
+    if (!allowedRoles.includes(req.staff!.role)) {
+      throw new ForbiddenError('Your role cannot perform this action');
+    }
     await updateOrderItemStatus(req.staff!.restaurantId, req.params.id, parsed.data.status);
+    res.status(204).send();
+  }),
+);
+
+// Manual until real payment integration exists -- an order starts and
+// stays 'unpaid' until a waiter marks it, and closeTableSession (see
+// tables.repository.ts) refuses to close a table with any unpaid orders.
+staffRoutes.patch(
+  '/staff/orders/:publicToken/payment-status',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    await markOrderPaid(req.staff!.restaurantId, req.params.publicToken);
     res.status(204).send();
   }),
 );

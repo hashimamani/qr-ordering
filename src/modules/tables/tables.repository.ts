@@ -264,6 +264,7 @@ export async function findTableContextByPublicToken(publicToken: string): Promis
 }
 
 export interface WaiterOrderItem {
+  order_item_id: string;
   menu_item_name: string;
   quantity: number;
   status: 'received' | 'preparing' | 'ready' | 'served';
@@ -273,6 +274,7 @@ export interface WaiterOrder {
   public_token: string;
   contact_channel: 'sms' | 'email';
   submitted_at: string;
+  payment_status: 'unpaid' | 'paid';
   items: WaiterOrderItem[];
 }
 
@@ -323,12 +325,14 @@ export async function listActiveTableSessionsForRestaurant(
     public_token: string;
     contact_channel: WaiterOrder['contact_channel'];
     submitted_at: string;
+    payment_status: WaiterOrder['payment_status'];
+    order_item_id: string;
     menu_item_name: string;
     quantity: number;
     status: WaiterOrderItem['status'];
   }>(
-    `SELECT o.table_session_id, o.public_token, o.contact_channel, o.submitted_at,
-            mi.name AS menu_item_name, oi.quantity, oi.status
+    `SELECT o.table_session_id, o.public_token, o.contact_channel, o.submitted_at, o.payment_status,
+            oi.id AS order_item_id, mi.name AS menu_item_name, oi.quantity, oi.status
      FROM "order" o
      JOIN order_item oi ON oi.order_id = o.id
      JOIN menu_item mi ON mi.id = oi.menu_item_id
@@ -348,10 +352,12 @@ export async function listActiveTableSessionsForRestaurant(
         public_token: row.public_token,
         contact_channel: row.contact_channel,
         submitted_at: row.submitted_at,
+        payment_status: row.payment_status,
         items: [],
       });
     }
     ordersForSession.get(row.public_token)!.items.push({
+      order_item_id: row.order_item_id,
       menu_item_name: row.menu_item_name,
       quantity: row.quantity,
       status: row.status,
@@ -410,6 +416,17 @@ export async function closeTableSession(
       session.assigned_waiter_id !== requestingStaff.id
     ) {
       throw new ForbiddenError('This table is assigned to a different waiter');
+    }
+
+    // No payment integration yet -- "paid" is a manual waiter action, so
+    // this is the one place that manual step gets enforced before a table
+    // can be freed up for its next customer.
+    const unpaid = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM "order" WHERE table_session_id = $1 AND payment_status = 'unpaid'`,
+      [sessionId],
+    );
+    if (unpaid.rows[0].count !== '0') {
+      throw new ConflictError('This table has unpaid orders -- mark them paid before closing');
     }
 
     await client.query('UPDATE table_session SET status = $1, closed_at = now() WHERE id = $2', [

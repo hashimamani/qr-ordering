@@ -10,7 +10,7 @@ import {
   type RestaurantTable,
 } from '../tables/tables.repository';
 import { findMenuItemsByIds } from '../menu/menu.repository';
-import { insertOrder, type CreateOrderItemInput } from './orders.repository';
+import { insertOrder, markOrderAsPaid, type CreateOrderItemInput } from './orders.repository';
 import { generateToken } from '../../lib/token';
 import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, ValidationError } from '../../lib/errors';
@@ -133,6 +133,10 @@ export async function placeOrder(
     public_token: order.public_token,
     tracking_url: trackingUrl,
   };
+}
+
+export async function markOrderPaid(restaurantId: string, publicToken: string): Promise<void> {
+  await markOrderAsPaid(restaurantId, publicToken);
 }
 
 /**

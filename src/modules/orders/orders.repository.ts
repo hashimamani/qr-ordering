@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
+import { NotFoundError } from '../../lib/errors';
 
 export interface CreateOrderItemInput {
   menu_item_id: string;
@@ -82,4 +83,20 @@ export async function findOrderNotificationContext(orderId: string): Promise<Ord
     [orderId],
   );
   return result.rows[0];
+}
+
+/**
+ * Manual "mark paid" -- no payment integration exists yet, so this is a
+ * waiter's own record-keeping until a real processor sets this by default.
+ * Addressed by public_token, not the internal id, matching every other
+ * staff-facing order lookup (Order.id is never serialized anywhere).
+ */
+export async function markOrderAsPaid(restaurantId: string, publicToken: string): Promise<void> {
+  const result = await query(
+    `UPDATE "order" SET payment_status = 'paid' WHERE public_token = $1 AND restaurant_id = $2`,
+    [publicToken, restaurantId],
+  );
+  if (result.rowCount === 0) {
+    throw new NotFoundError('Order not found');
+  }
 }

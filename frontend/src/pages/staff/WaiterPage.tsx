@@ -15,6 +15,8 @@ export function WaiterPage() {
   const [error, setError] = useState('');
   const [closingId, setClosingId] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
+  const [servingId, setServingId] = useState<string | null>(null);
+  const [payingToken, setPayingToken] = useState<string | null>(null);
   const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
   const [startTableId, setStartTableId] = useState('');
   const push = usePushSubscription();
@@ -48,6 +50,36 @@ export function WaiterPage() {
       setError(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setClosingId(null);
+    }
+  }
+
+  async function markServed(orderItemId: string) {
+    setServingId(orderItemId);
+    setError('');
+    try {
+      await apiFetch(`/staff/order-items/${orderItemId}/status`, {
+        method: 'PATCH',
+        auth: true,
+        body: { status: 'served' },
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setServingId(null);
+    }
+  }
+
+  async function markPaid(publicToken: string) {
+    setPayingToken(publicToken);
+    setError('');
+    try {
+      await apiFetch(`/staff/orders/${publicToken}/payment-status`, { method: 'PATCH', auth: true });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setPayingToken(null);
     }
   }
 
@@ -127,17 +159,42 @@ export function WaiterPage() {
           {ts.orders.map((order) => (
             <div key={order.public_token} className="card order-block">
               <div className="order-block-header">
-                Order placed {new Date(order.submitted_at).toLocaleTimeString()} &middot;{' '}
-                <a className="tracking-link" href={`/track/${order.public_token}`} target="_blank" rel="noreferrer">
-                  tracking page
-                </a>
+                <span>
+                  Order placed {new Date(order.submitted_at).toLocaleTimeString()} &middot;{' '}
+                  <a className="tracking-link" href={`/track/${order.public_token}`} target="_blank" rel="noreferrer">
+                    tracking page
+                  </a>
+                </span>
+                <span className="order-block-payment">
+                  <span className={`status-pill status-${order.payment_status}`}>{order.payment_status}</span>
+                  {order.payment_status === 'unpaid' && (
+                    <button
+                      className="secondary"
+                      disabled={payingToken === order.public_token}
+                      onClick={() => markPaid(order.public_token)}
+                    >
+                      {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
+                    </button>
+                  )}
+                </span>
               </div>
-              {order.items.map((item, i) => (
-                <div key={i} className="item-row" style={{ marginBottom: 4 }}>
+              {order.items.map((item) => (
+                <div key={item.order_item_id} className="item-row" style={{ marginBottom: 4 }}>
                   <span>
                     {item.quantity}× {item.menu_item_name}
                   </span>
-                  <span className={`status-pill status-${item.status}`}>{item.status}</span>
+                  <span>
+                    <span className={`status-pill status-${item.status}`}>{item.status}</span>
+                    {item.status === 'ready' && (
+                      <button
+                        className="secondary"
+                        disabled={servingId === item.order_item_id}
+                        onClick={() => markServed(item.order_item_id)}
+                      >
+                        {servingId === item.order_item_id ? 'Marking served…' : 'Mark served'}
+                      </button>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
