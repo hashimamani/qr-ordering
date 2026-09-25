@@ -48,6 +48,7 @@ export function AdminMenuTab() {
       });
       setNewCategoryName('');
       load();
+      showToast('Category added.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     }
@@ -60,6 +61,7 @@ export function AdminMenuTab() {
       await apiFetch(`/admin/menu-categories/${deleteCategoryTarget.id}`, { method: 'DELETE', auth: true });
       setDeleteCategoryTarget(null);
       load();
+      showToast('Category deleted.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -84,6 +86,7 @@ export function AdminMenuTab() {
       });
       setNewItem({ category_id: newItem.category_id, name: '', description: '', price: '', destination: newItem.destination });
       load();
+      showToast('Menu item added.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     }
@@ -118,6 +121,7 @@ export function AdminMenuTab() {
       });
       setEditingItem(null);
       load();
+      showToast('Menu item updated.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -132,6 +136,7 @@ export function AdminMenuTab() {
       await apiFetch(`/admin/menu-items/${deleteItemTarget.id}`, { method: 'DELETE', auth: true });
       setDeleteItemTarget(null);
       load();
+      showToast('Menu item deleted.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

@@ -64,6 +64,7 @@ export function AdminTablesTab() {
       });
       setReassignTarget(null);
       load();
+      showToast('Table reassigned.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -105,6 +106,7 @@ export function AdminTablesTab() {
       });
       setConfirmRegenerate(null);
       load();
+      showToast('QR code regenerated.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -119,6 +121,7 @@ export function AdminTablesTab() {
       await apiFetch(`/admin/tables/${confirmRemove.id}`, { method: 'DELETE', auth: true });
       setConfirmRemove(null);
       load();
+      showToast('Table removed.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

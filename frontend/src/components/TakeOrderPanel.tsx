@@ -68,6 +68,7 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
       setCart(new Map());
       setContact('');
       onOrderPlaced();
+      showToast('Order placed.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

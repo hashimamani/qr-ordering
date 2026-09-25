@@ -52,6 +52,7 @@ export function DestinationDashboardPage({ destination, title }: { destination: 
         body: { status: nextStatus },
       });
       load();
+      showToast(nextStatus === 'preparing' ? 'Started preparing.' : 'Marked ready.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

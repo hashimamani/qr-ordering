@@ -51,6 +51,7 @@ export function WaiterPage() {
       await apiFetch(`/staff/table-sessions/${sessionId}/close`, { method: 'PATCH', auth: true });
       setConfirmClose(null);
       load();
+      showToast('Table closed.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -67,6 +68,7 @@ export function WaiterPage() {
         body: { status: 'served' },
       });
       load();
+      showToast('Item marked served.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -79,6 +81,7 @@ export function WaiterPage() {
     try {
       await apiFetch(`/staff/orders/${publicToken}/payment-status`, { method: 'PATCH', auth: true });
       load();
+      showToast('Order marked paid.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

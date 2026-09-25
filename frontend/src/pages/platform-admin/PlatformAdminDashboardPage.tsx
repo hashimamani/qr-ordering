@@ -68,6 +68,7 @@ export function PlatformAdminDashboardPage() {
       });
       setResetPasswords((prev) => ({ ...prev, [staffId]: '' }));
       setResetDoneId(staffId);
+      showToast('Password reset.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -101,6 +102,7 @@ export function PlatformAdminDashboardPage() {
       });
       setForm(EMPTY_FORM);
       load();
+      showToast('Restaurant onboarded.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

@@ -50,6 +50,7 @@ export function AdminStaffTab() {
       });
       setForm({ name: '', role: 'waiter', phone_or_email: '', password: '' });
       load();
+      showToast('Staff login added.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -84,6 +85,7 @@ export function AdminStaffTab() {
       setEditing(null);
       setEditForm(null);
       load();
+      showToast('Staff details updated.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
@@ -98,6 +100,7 @@ export function AdminStaffTab() {
       await apiFetch(`/admin/staff/${removing.id}`, { method: 'DELETE', auth: true });
       setRemoving(null);
       load();
+      showToast('Staff login removed.', 'success');
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
