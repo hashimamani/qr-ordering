@@ -14,13 +14,17 @@ interface PlatformAdminAuthContextValue {
 const PlatformAdminAuthContext = createContext<PlatformAdminAuthContextValue | null>(null);
 
 // Deliberately separate from AuthContext (the staff/restaurant-admin
-// session) rather than generalized into it -- different localStorage
-// keys, different token audience, and a platform admin is never scoped
-// to a restaurant_id the way a StaffSession always is.
+// session) rather than generalized into it -- different storage keys,
+// different token audience, and a platform admin is never scoped to a
+// restaurant_id the way a StaffSession always is.
+//
+// sessionStorage, not localStorage -- scoped to this one tab so logging
+// into a second session in another tab can't silently overwrite this
+// tab's token underneath it (see the identical comment in AuthContext).
 export function PlatformAdminAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<PlatformAdminSession | null>(() => {
-    const token = localStorage.getItem('platformAdminToken');
-    const name = localStorage.getItem('platformAdminName') ?? '';
+    const token = sessionStorage.getItem('platformAdminToken');
+    const name = sessionStorage.getItem('platformAdminName') ?? '';
     return token ? { token, name } : null;
   });
 
@@ -28,13 +32,13 @@ export function PlatformAdminAuthProvider({ children }: { children: ReactNode })
     () => ({
       session,
       login: (token: string, name: string) => {
-        localStorage.setItem('platformAdminToken', token);
-        localStorage.setItem('platformAdminName', name);
+        sessionStorage.setItem('platformAdminToken', token);
+        sessionStorage.setItem('platformAdminName', name);
         setSession({ token, name });
       },
       logout: () => {
-        localStorage.removeItem('platformAdminToken');
-        localStorage.removeItem('platformAdminName');
+        sessionStorage.removeItem('platformAdminToken');
+        sessionStorage.removeItem('platformAdminName');
         setSession(null);
       },
     }),

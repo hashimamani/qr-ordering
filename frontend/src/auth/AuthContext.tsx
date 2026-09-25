@@ -26,10 +26,16 @@ function decodeSession(token: string, name: string): StaffSession | null {
   }
 }
 
+// sessionStorage, not localStorage -- deliberately scoped to this one tab.
+// localStorage is shared across every tab on the origin, so logging into a
+// second role (e.g. admin) in another tab would silently overwrite the
+// token a first tab's already-open waiter session reads on its next
+// request, making that tab start acting (and seeing data) as the new
+// role under the old one's UI chrome.
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(() => {
-    const token = localStorage.getItem('staffToken');
-    const name = localStorage.getItem('staffName') ?? '';
+    const token = sessionStorage.getItem('staffToken');
+    const name = sessionStorage.getItem('staffName') ?? '';
     return token ? decodeSession(token, name) : null;
   });
 
@@ -37,13 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       login: (token: string, name: string) => {
-        localStorage.setItem('staffToken', token);
-        localStorage.setItem('staffName', name);
+        sessionStorage.setItem('staffToken', token);
+        sessionStorage.setItem('staffName', name);
         setSession(decodeSession(token, name));
       },
       logout: () => {
-        localStorage.removeItem('staffToken');
-        localStorage.removeItem('staffName');
+        sessionStorage.removeItem('staffToken');
+        sessionStorage.removeItem('staffName');
         setSession(null);
       },
     }),

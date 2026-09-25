@@ -25,7 +25,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (options.authToken) {
     headers['Authorization'] = `Bearer ${options.authToken}`;
   } else if (options.auth) {
-    const token = localStorage.getItem('staffToken');
+    const token = sessionStorage.getItem('staffToken');
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
