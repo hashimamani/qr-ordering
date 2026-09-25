@@ -176,18 +176,7 @@ export function WaiterPage() {
                     tracking page
                   </a>
                 </span>
-                <span className="order-block-payment">
-                  <span className={`status-pill status-${order.payment_status}`}>{order.payment_status}</span>
-                  {order.payment_status === 'unpaid' && (
-                    <button
-                      className="secondary"
-                      disabled={payingToken === order.public_token}
-                      onClick={() => markPaid(order.public_token)}
-                    >
-                      {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
-                    </button>
-                  )}
-                </span>
+                <span className={`status-pill status-${order.payment_status}`}>{order.payment_status}</span>
               </div>
               {order.items.map((item) => (
                 <div key={item.order_item_id} className="item-row" style={{ marginBottom: 4 }}>
@@ -208,6 +197,17 @@ export function WaiterPage() {
                   </span>
                 </div>
               ))}
+              {order.payment_status === 'unpaid' && (
+                <div className="order-block-footer">
+                  <button
+                    className="secondary"
+                    disabled={payingToken === order.public_token}
+                    onClick={() => markPaid(order.public_token)}
+                  >
+                    {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

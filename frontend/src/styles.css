@@ -213,8 +213,11 @@ label { font-size: 13px; color: var(--ink-600); font-weight: 600; display: block
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   font-size: 12px; color: var(--ink-500); margin-bottom: 6px; font-weight: 500;
 }
-.order-block-payment { display: inline-flex; align-items: center; gap: 8px; }
 .order-block .item-row > span:last-child { display: inline-flex; align-items: center; gap: 8px; }
+.order-block-footer {
+  display: flex; justify-content: flex-end; margin-top: 8px; padding-top: 10px;
+  border-top: 1px solid var(--ink-100);
+}
 
 .error-banner {
   background: var(--red-50); color: var(--red-700); padding: 12px 16px; border-radius: var(--radius-sm);
