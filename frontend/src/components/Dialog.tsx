@@ -20,13 +20,24 @@ interface DialogProps {
 export function Dialog({ open, onClose, title, children, footer }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Focus the panel once, when the dialog actually opens -- deliberately
+  // depends on `open` alone. Typing in a field inside the dialog re-renders
+  // the parent on every keystroke, which recreates the `onClose` closure;
+  // if that were in this effect's deps, the effect (and its focus() call)
+  // would re-run on every keystroke too, yanking focus off the input and
+  // away from it mid-type -- on mobile this closes the on-screen keyboard
+  // after every character.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
     document.addEventListener('keydown', onKeyDown);
-    panelRef.current?.focus();
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
