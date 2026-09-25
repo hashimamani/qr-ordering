@@ -100,6 +100,25 @@ export function BellIcon(props: IconProps) {
   );
 }
 
+export function FlameIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+    </svg>
+  );
+}
+
+export function BanknoteIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M6 12h.01" />
+      <path d="M18 12h.01" />
+    </svg>
+  );
+}
+
 export function ClipboardListIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -5,6 +5,7 @@ import { StaffLayout } from '../../components/StaffLayout';
 import { useToast } from '../../components/ToastProvider';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
+import { BellIcon, FlameIcon } from '../../components/icons';
 
 // Stops at 'ready' -- marking an item 'served' is the waiter's call, not
 // kitchen/bar's (they're not the ones actually bringing it to the table).
@@ -15,6 +16,10 @@ const NEXT_STATUS: Partial<Record<OrderItemStatus, OrderItemStatus>> = {
 const NEXT_LABEL: Partial<Record<OrderItemStatus, string>> = {
   received: 'Start preparing',
   preparing: 'Mark ready',
+};
+const NEXT_ICON: Partial<Record<OrderItemStatus, JSX.Element>> = {
+  received: <FlameIcon size={14} />,
+  preparing: <BellIcon size={14} />,
 };
 
 export function DestinationDashboardPage({ destination, title }: { destination: Destination; title: string }) {
@@ -74,10 +79,11 @@ export function DestinationDashboardPage({ destination, title }: { destination: 
                 </div>
                 {next && (
                   <button
-                    className="secondary"
+                    className="ghost"
                     disabled={pendingId === item.order_item_id}
                     onClick={() => advance(item.order_item_id, next)}
                   >
+                    {NEXT_ICON[item.status]}
                     {NEXT_LABEL[item.status]}
                   </button>
                 )}

@@ -6,7 +6,7 @@ import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
-import { CheckIcon, ClipboardListIcon, XIcon } from '../../components/icons';
+import { BanknoteIcon, CheckIcon, ClipboardListIcon, XIcon } from '../../components/icons';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -205,7 +205,7 @@ export function WaiterPage() {
                     disabled={payingToken === order.public_token}
                     onClick={() => markPaid(order.public_token)}
                   >
-                    <CheckIcon size={14} />
+                    <BanknoteIcon size={14} />
                     {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
                   </button>
                 </div>
