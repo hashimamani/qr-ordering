@@ -201,6 +201,8 @@ label { font-size: 13px; color: var(--ink-600); font-weight: 600; display: block
 .status-served { background: var(--ink-100); color: var(--ink-600); }
 .status-unpaid { background: var(--amber-50); color: var(--amber-700); }
 .status-paid { background: var(--green-50); color: var(--green-700); }
+.status-assigned { background: var(--blue-50); color: var(--blue-700); text-transform: none; }
+.status-unassigned { background: var(--ink-100); color: var(--ink-500); }
 
 /* Table blocks (kitchen/bar/waiter dashboards) */
 

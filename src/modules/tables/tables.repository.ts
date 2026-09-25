@@ -285,6 +285,7 @@ export interface WaiterTableSession {
   table_number: string;
   opened_at: string;
   assigned_waiter_id: string | null;
+  assigned_waiter_name: string | null;
   orders: WaiterOrder[];
 }
 
@@ -294,7 +295,10 @@ export interface WaiterTableSession {
  *
  * `waiterId` scopes the result to that waiter's own tables plus any still-
  * unassigned ones -- pass it only for the `waiter` role; omit it for
- * `admin`, who sees every table.
+ * `admin`, who sees every table. assigned_waiter_name is included so an
+ * admin looking at the full board can tell which waiter owns which table
+ * -- a waiter viewing their own board already knows (it's either them or
+ * unassigned), but the name costs nothing extra to include for them too.
  */
 export async function listActiveTableSessionsForRestaurant(
   restaurantId: string,
@@ -307,10 +311,13 @@ export async function listActiveTableSessionsForRestaurant(
     table_number: string;
     opened_at: string;
     assigned_waiter_id: string | null;
+    assigned_waiter_name: string | null;
   }>(
-    `SELECT ts.id AS session_id, ts.status AS session_status, t.id AS table_id, t.table_number, ts.opened_at, t.assigned_waiter_id
+    `SELECT ts.id AS session_id, ts.status AS session_status, t.id AS table_id, t.table_number, ts.opened_at,
+            t.assigned_waiter_id, s.name AS assigned_waiter_name
      FROM table_session ts
      JOIN "table" t ON t.id = ts.table_id
+     LEFT JOIN staff_user s ON s.id = t.assigned_waiter_id
      WHERE t.restaurant_id = $1 AND ts.status IN ('active', 'awaiting_payment')
        ${waiterId ? 'AND (t.assigned_waiter_id = $2 OR t.assigned_waiter_id IS NULL)' : ''}
      ORDER BY t.table_number, ts.opened_at`,

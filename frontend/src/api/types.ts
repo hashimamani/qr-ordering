@@ -88,6 +88,7 @@ export interface WaiterTableSession {
   table_number: string;
   opened_at: string;
   assigned_waiter_id: string | null;
+  assigned_waiter_name: string | null;
   orders: WaiterOrder[];
 }
 

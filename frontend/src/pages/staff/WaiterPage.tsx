@@ -130,7 +130,11 @@ export function WaiterPage() {
           <div className="top-bar">
             <h3>
               Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>{' '}
-              {!ts.assigned_waiter_id && <span className="status-pill">unassigned</span>}
+              {ts.assigned_waiter_name ? (
+                <span className="status-pill status-assigned">{ts.assigned_waiter_name}</span>
+              ) : (
+                <span className="status-pill status-unassigned">unassigned</span>
+              )}
             </h3>
             <div>
               <button
