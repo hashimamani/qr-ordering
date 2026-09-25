@@ -150,22 +150,6 @@ export function WaiterPage() {
       {sessions.length === 0 && idleTables.length === 0 && <div className="empty-state">No tables yet.</div>}
       {sessions.map((ts) => (
         <div key={ts.session_id} className="table-block">
-          {ts.calling_since && (
-            <div className="calling-alert">
-              <span className="calling-alert-text">
-                <BellIcon size={16} />
-                Customer is calling
-              </span>
-              <button
-                className="ghost"
-                disabled={acknowledgingId === ts.session_id}
-                onClick={() => acknowledgeCall(ts.session_id)}
-              >
-                <CheckIcon size={14} />
-                {acknowledgingId === ts.session_id ? 'Clearing…' : 'Acknowledge'}
-              </button>
-            </div>
-          )}
           <div className="top-bar">
             <h3>
               Table {ts.table_number} <span className="status-pill status-received">{ts.session_status}</span>{' '}
@@ -173,6 +157,17 @@ export function WaiterPage() {
                 <span className="status-pill status-assigned">{ts.assigned_waiter_name}</span>
               ) : (
                 <span className="status-pill status-unassigned">unassigned</span>
+              )}
+              {ts.calling_since && (
+                <button
+                  className="calling-bell"
+                  disabled={acknowledgingId === ts.session_id}
+                  onClick={() => acknowledgeCall(ts.session_id)}
+                  aria-label="Customer is calling -- click to acknowledge"
+                  title="Customer is calling -- click to acknowledge"
+                >
+                  <BellIcon size={13} />
+                </button>
               )}
             </h3>
             <RowMenu
