@@ -187,7 +187,7 @@ export function WaiterPage() {
                     <span className={`status-pill status-${item.status}`}>{item.status}</span>
                     {item.status === 'ready' && (
                       <button
-                        className="secondary"
+                        className="ghost"
                         disabled={servingId === item.order_item_id}
                         onClick={() => markServed(item.order_item_id)}
                       >
@@ -201,7 +201,7 @@ export function WaiterPage() {
               {order.payment_status === 'unpaid' && (
                 <div className="order-block-footer">
                   <button
-                    className="secondary"
+                    className="ghost"
                     disabled={payingToken === order.public_token}
                     onClick={() => markPaid(order.public_token)}
                   >
