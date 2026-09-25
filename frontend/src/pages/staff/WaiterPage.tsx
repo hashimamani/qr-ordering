@@ -4,7 +4,9 @@ import type { IdleTable, WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
 import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
+import { ClipboardListIcon, XIcon } from '../../components/icons';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -136,17 +138,23 @@ export function WaiterPage() {
                 <span className="status-pill status-unassigned">unassigned</span>
               )}
             </h3>
-            <div>
-              <button
-                className="secondary"
-                onClick={() => setTakingOrderForTableId(takingOrderForTableId === ts.table_id ? null : ts.table_id)}
-              >
-                {takingOrderForTableId === ts.table_id ? 'Cancel' : 'Take order'}
-              </button>{' '}
-              <button className="secondary danger" disabled={closingId === ts.session_id} onClick={() => setConfirmClose(ts)}>
-                Close table
-              </button>
-            </div>
+            <RowMenu
+              label={`Actions for table ${ts.table_number}`}
+              actions={[
+                {
+                  label: takingOrderForTableId === ts.table_id ? 'Cancel take order' : 'Take order',
+                  icon: <ClipboardListIcon size={16} />,
+                  onSelect: () => setTakingOrderForTableId(takingOrderForTableId === ts.table_id ? null : ts.table_id),
+                },
+                {
+                  label: 'Close table',
+                  icon: <XIcon size={16} />,
+                  danger: true,
+                  disabled: closingId === ts.session_id,
+                  onSelect: () => setConfirmClose(ts),
+                },
+              ]}
+            />
           </div>
           {takingOrderForTableId === ts.table_id && (
             <TakeOrderPanel
