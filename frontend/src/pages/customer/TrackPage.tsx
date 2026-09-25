@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../../api/client';
 import type { TrackedOrder } from '../../api/types';
 import { StatusPill } from '../../components/StatusPill';
 import { useToast } from '../../components/ToastProvider';
+import { PhoneIcon } from '../../components/icons';
 import { useRealtime } from '../../hooks/useRealtime';
 
 const CALL_WAITER_COOLDOWN_MS = 30_000;
@@ -57,6 +58,7 @@ export function TrackPage() {
         {loadError && <div className="error-banner">{loadError}</div>}
         <div className="card" style={{ marginBottom: 16 }}>
           <button className="secondary" disabled={calling || onCooldown} onClick={callWaiter}>
+            <PhoneIcon size={16} />
             {onCooldown ? 'Waiter has been notified' : calling ? 'Calling…' : 'Call waiter'}
           </button>
         </div>
