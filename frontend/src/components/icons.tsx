@@ -123,6 +123,14 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 export function LogOutIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

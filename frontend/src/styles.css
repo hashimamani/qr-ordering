@@ -165,6 +165,7 @@ button.primary:active:not(:disabled) { transform: translateY(1px); }
 button.primary:disabled { background: var(--ink-300); box-shadow: none; cursor: not-allowed; }
 
 button.secondary {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 9px 16px; border-radius: var(--radius-sm); border: 1px solid var(--ink-300);
   background: white; color: var(--ink-700); cursor: pointer; font-size: 13px; font-weight: 600;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
