@@ -25,6 +25,12 @@ export function useRealtime(room: string | null, token: string | null, onEvent: 
     let socket: WebSocket;
     let attempt = 0;
     let closedByEffect = false;
+    // Set once the server says this room is done for good (e.g. an
+    // order that's paid and fully served) -- there's nothing left to
+    // reconnect for, so stop trying and let the connection go rather
+    // than holding it (and the server-side resources behind it) open
+    // indefinitely for a tab the customer just leaves open.
+    let done = false;
 
     function connect() {
       socket = new WebSocket(WS_BASE);
@@ -43,11 +49,17 @@ export function useRealtime(room: string | null, token: string | null, onEvent: 
           console.warn('realtime error:', event.message);
           return;
         }
+        if (event.type === 'order_complete') {
+          done = true;
+          onEventRef.current(event);
+          socket.close();
+          return;
+        }
         onEventRef.current(event);
       };
       socket.onclose = () => {
         setConnected(false);
-        if (closedByEffect) return;
+        if (closedByEffect || done) return;
         attempt += 1;
         setTimeout(connect, Math.min(1000 * attempt, 10000));
       };

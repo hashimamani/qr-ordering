@@ -6,6 +6,7 @@ import {
   type QueuedOrderItem,
 } from './orderItems.repository';
 import { findOrderNotificationContext } from '../orders/orders.repository';
+import { finalizeOrderIfComplete } from '../orders/orders.service';
 import { findOrderByPublicToken } from '../tracking/tracking.repository';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { trackingUrlFor } from '../../lib/urls';
@@ -53,6 +54,10 @@ export async function updateOrderItemStatus(
     type: 'status_changed',
     items: trackedOrder.items,
   });
+
+  if (newStatus === 'served') {
+    await finalizeOrderIfComplete(result.orderPublicToken);
+  }
 
   if (result.isFirstReadyForOrder) {
     const context = await findOrderNotificationContext(result.orderId);

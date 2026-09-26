@@ -10,13 +10,13 @@ import {
   type RestaurantTable,
 } from '../tables/tables.repository';
 import { findMenuItemsByIds } from '../menu/menu.repository';
-import { insertOrder, markOrderAsPaid, type CreateOrderItemInput } from './orders.repository';
+import { insertOrder, markOrderAsPaid, isOrderFullyComplete, type CreateOrderItemInput } from './orders.repository';
 import { generateToken } from '../../lib/token';
 import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
-import { broadcastEvent } from '../../realtime/broadcaster';
+import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../../realtime/webPush';
 import { logger } from '../../lib/logger';
@@ -137,6 +137,22 @@ export async function placeOrder(
 
 export async function markOrderPaid(restaurantId: string, publicToken: string): Promise<void> {
   await markOrderAsPaid(restaurantId, publicToken);
+  await finalizeOrderIfComplete(publicToken);
+}
+
+/**
+ * Releases the order's `order:{token}` websocket room once it needs no
+ * more realtime updates -- paid, and every item served. Called after
+ * both transitions that could complete an order: the last item being
+ * marked served (orderItems.service.ts), and payment being marked paid
+ * (above). A tracking page left open past this point would otherwise
+ * hold its connection (and the connections-table row backing it) for as
+ * long as the tab stays open, for an order that will never change again.
+ */
+export async function finalizeOrderIfComplete(publicToken: string): Promise<void> {
+  if (!(await isOrderFullyComplete(publicToken))) return;
+  await broadcastEvent(`order:${publicToken}`, { type: 'order_complete' });
+  await closeRoom(`order:${publicToken}`);
 }
 
 /**

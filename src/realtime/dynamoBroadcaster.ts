@@ -1,6 +1,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import {
+  ApiGatewayManagementApiClient,
+  PostToConnectionCommand,
+  DeleteConnectionCommand,
+} from '@aws-sdk/client-apigatewaymanagementapi';
 import { logger } from '../lib/logger';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -40,6 +44,48 @@ export async function dynamoBroadcast(room: string, event: Record<string, unknow
           logger.warn({ err, connectionId: item.connectionId }, 'failed to post to websocket connection');
         }
       }
+    }),
+  );
+}
+
+/**
+ * Forcibly ends every connection subscribed to `room` -- the IAM
+ * resource ARN for execute-api:ManageConnections is always written with
+ * "POST" regardless of which of PostToConnection/GetConnection/
+ * DeleteConnection is actually called, so this needs no extra grant
+ * beyond the one dynamoBroadcast already relies on. DeleteConnection
+ * fires $disconnect for that connection, which prunes its row from
+ * WS_CONNECTIONS_TABLE -- deleted here too so a broadcast racing this
+ * teardown doesn't still find it via the room-index.
+ */
+export async function dynamoCloseRoom(room: string): Promise<void> {
+  const tableName = process.env.WS_CONNECTIONS_TABLE;
+  const endpoint = process.env.WEBSOCKET_MANAGEMENT_ENDPOINT;
+  if (!tableName || !endpoint) return;
+
+  const management = new ApiGatewayManagementApiClient({ endpoint });
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: tableName,
+      IndexName: 'room-index',
+      KeyConditionExpression: 'room = :room',
+      ExpressionAttributeValues: { ':room': room },
+    }),
+  );
+
+  await Promise.all(
+    (result.Items ?? []).map(async (item) => {
+      try {
+        await management.send(new DeleteConnectionCommand({ ConnectionId: item.connectionId }));
+      } catch (err) {
+        const statusCode = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+        if (statusCode !== 410) {
+          logger.warn({ err, connectionId: item.connectionId }, 'failed to close websocket connection');
+        }
+      }
+      await ddb
+        .send(new DeleteCommand({ TableName: tableName, Key: { connectionId: item.connectionId } }))
+        .catch(() => {});
     }),
   );
 }

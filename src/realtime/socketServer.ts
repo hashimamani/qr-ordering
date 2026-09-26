@@ -98,3 +98,19 @@ export function broadcast(room: string, event: Record<string, unknown>): void {
     }
   }
 }
+
+/**
+ * Forcibly ends every connection in `room` and drops the room -- used
+ * once a room will never receive another event (e.g. an order that's
+ * paid and fully served), so a tab left open doesn't hold the connection
+ * indefinitely. The client's own onclose handler still fires; it's told
+ * beforehand (via a normal broadcast) not to reconnect.
+ */
+export function closeRoom(room: string): void {
+  const members = rooms.get(room);
+  if (!members) return;
+  for (const socket of members) {
+    socket.close(1000, 'room closed');
+  }
+  rooms.delete(room);
+}

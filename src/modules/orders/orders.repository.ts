@@ -100,3 +100,20 @@ export async function markOrderAsPaid(restaurantId: string, publicToken: string)
     throw new NotFoundError('Order not found');
   }
 }
+
+/**
+ * True once an order needs no further realtime updates -- paid, and
+ * every item served. The caller uses this to release the order's
+ * websocket room instead of leaving it open for a tracking page that
+ * will never receive another event.
+ */
+export async function isOrderFullyComplete(publicToken: string): Promise<boolean> {
+  const result = await query<{ complete: boolean }>(
+    `SELECT o.payment_status = 'paid'
+       AND NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = o.id AND status != 'served') AS complete
+     FROM "order" o
+     WHERE o.public_token = $1`,
+    [publicToken],
+  );
+  return result.rows[0]?.complete ?? false;
+}
