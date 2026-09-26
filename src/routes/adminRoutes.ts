@@ -32,6 +32,8 @@ import { listMenuForRestaurantAdmin } from '../modules/menu/menu.repository';
 import { listStaffUsersForRestaurant, deleteStaffUser } from '../modules/staff/staff.repository';
 import { findRestaurantById } from '../modules/tables/tables.repository';
 import { ForbiddenError } from '../lib/errors';
+import { dateRangeSchema, breakdownQuerySchema, exportQuerySchema } from '../modules/reports/reports.validation';
+import { getTodaySummary, getSummary, getBreakdown, renderExport } from '../modules/reports/reports.service';
 
 export const adminRoutes = Router();
 
@@ -231,5 +233,62 @@ adminRoutes.delete(
     }
     await deleteStaffUser(req.staff!.restaurantId, req.params.id);
     res.status(204).send();
+  }),
+);
+
+// Reads only report_order_fact/report_order_item_fact (see
+// modules/reports/) -- never joins back to the operational tables above.
+// "today" is always the live tile the admin room's sales_changed
+// broadcast (fired by the reporting worker, not this Lambda) tells the
+// frontend to refetch; summary/breakdown/export all take an explicit
+// from/to range.
+adminRoutes.get(
+  '/admin/reports/today',
+  asyncHandler(async (req, res) => {
+    const summary = await getTodaySummary(req.staff!.restaurantId);
+    res.json(summary);
+  }),
+);
+
+adminRoutes.get(
+  '/admin/reports/summary',
+  asyncHandler(async (req, res) => {
+    const parsed = dateRangeSchema.safeParse(req.query);
+    if (!parsed.success) throw new ValidationError('Invalid report range', parsed.error.flatten());
+    const summary = await getSummary(req.staff!.restaurantId, parsed.data.from, parsed.data.to);
+    res.json(summary);
+  }),
+);
+
+adminRoutes.get(
+  '/admin/reports/breakdown',
+  asyncHandler(async (req, res) => {
+    const parsed = breakdownQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw new ValidationError('Invalid breakdown request', parsed.error.flatten());
+    const breakdown = await getBreakdown(
+      req.staff!.restaurantId,
+      parsed.data.from,
+      parsed.data.to,
+      parsed.data.dimension,
+    );
+    res.json(breakdown);
+  }),
+);
+
+adminRoutes.get(
+  '/admin/reports/export',
+  asyncHandler(async (req, res) => {
+    const parsed = exportQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw new ValidationError('Invalid export request', parsed.error.flatten());
+    const { body, contentType, filename } = await renderExport(
+      req.staff!.restaurantId,
+      parsed.data.from,
+      parsed.data.to,
+      parsed.data.format,
+      parsed.data.dataset,
+    );
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(body);
   }),
 );

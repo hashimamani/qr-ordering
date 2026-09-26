@@ -3,8 +3,9 @@ import { StaffLayout } from '../../components/StaffLayout';
 import { AdminMenuTab } from './AdminMenuTab';
 import { AdminTablesTab } from './AdminTablesTab';
 import { AdminStaffTab } from './AdminStaffTab';
+import { AdminReportsTab } from './AdminReportsTab';
 
-type Tab = 'menu' | 'tables' | 'staff';
+type Tab = 'menu' | 'tables' | 'staff' | 'reports';
 
 export function AdminPage() {
   const [tab, setTab] = useState<Tab>('menu');
@@ -21,10 +22,14 @@ export function AdminPage() {
         <button className={tab === 'staff' ? 'active' : ''} onClick={() => setTab('staff')}>
           Staff
         </button>
+        <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
+          Reports
+        </button>
       </div>
       {tab === 'menu' && <AdminMenuTab />}
       {tab === 'tables' && <AdminTablesTab />}
       {tab === 'staff' && <AdminStaffTab />}
+      {tab === 'reports' && <AdminReportsTab />}
     </StaffLayout>
   );
 }

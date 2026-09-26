@@ -16,6 +16,7 @@ import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
+import { getReportingQueue } from '../reports/events/reportingEvents.queue';
 import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../../realtime/webPush';
@@ -66,7 +67,7 @@ async function createOrderForTable(
 
   const publicToken = generateToken();
 
-  const order = await insertOrder({
+  const { order, items: createdItems } = await insertOrder({
     publicToken,
     tableSessionId: session.id,
     restaurantId: restaurant.id,
@@ -89,6 +90,38 @@ async function createOrderForTable(
     });
   } catch (err) {
     logger.error({ err, orderId: order.id }, 'failed to enqueue order_received notification');
+  }
+
+  // Same non-blocking contract as the notification enqueue above -- this
+  // is the only place the reporting fact tables ever hear about a new
+  // order, and it must never affect order submission. The event is
+  // self-contained (menu item name/category/price snapshotted right now,
+  // from data already in hand) so a delayed/retried worker can never pick
+  // up a since-changed price -- see modules/reports/events/.
+  try {
+    await getReportingQueue().enqueue({
+      type: 'order_placed',
+      orderId: order.id,
+      restaurantId: restaurant.id,
+      submittedAt: order.submitted_at,
+      tableId: table.id,
+      tableNumber: table.table_number,
+      items: orderItems.map((item, i) => {
+        const menuItem = menuItemById.get(item.menu_item_id)!;
+        return {
+          orderItemId: createdItems[i].id,
+          menuItemId: menuItem.id,
+          menuItemName: menuItem.name,
+          categoryId: menuItem.category_id,
+          categoryName: menuItem.category_name,
+          destination: item.destination,
+          quantity: item.quantity,
+          unitPrice: menuItem.price,
+        };
+      }),
+    });
+  } catch (err) {
+    logger.error({ err, orderId: order.id }, 'failed to enqueue order_placed reporting event');
   }
 
   const destinationsInOrder = new Set(orderItems.map((item) => item.destination));
@@ -127,6 +160,7 @@ export async function placeOrder(
       title: `Table ${table.table_number}`,
       body: 'New order placed',
     });
+    await enqueueOrderWaiterAssigned(order.id, restaurant.id, assignedWaiterId);
   }
 
   return {
@@ -135,8 +169,28 @@ export async function placeOrder(
   };
 }
 
+/**
+ * Best-effort, non-blocking -- same contract as every other reporting
+ * enqueue in this file. Waiter assignment can only be known after the
+ * order already exists (see the round-robin/direct-assign comments below),
+ * so this always fires after order placement's own response is already
+ * being prepared, never in a position to affect it.
+ */
+async function enqueueOrderWaiterAssigned(orderId: string, restaurantId: string, waiterId: string): Promise<void> {
+  try {
+    await getReportingQueue().enqueue({ type: 'order_waiter_assigned', orderId, restaurantId, waiterId });
+  } catch (err) {
+    logger.error({ err, orderId }, 'failed to enqueue order_waiter_assigned reporting event');
+  }
+}
+
 export async function markOrderPaid(restaurantId: string, publicToken: string): Promise<void> {
-  await markOrderAsPaid(restaurantId, publicToken);
+  const { id: orderId } = await markOrderAsPaid(restaurantId, publicToken);
+  try {
+    await getReportingQueue().enqueue({ type: 'order_paid', orderId, restaurantId });
+  } catch (err) {
+    logger.error({ err, orderId }, 'failed to enqueue order_paid reporting event');
+  }
   await finalizeOrderIfComplete(publicToken);
 }
 
@@ -208,6 +262,9 @@ export async function placeStaffOrder(
       title: `Table ${table.table_number}`,
       body: 'New order placed',
     });
+  }
+  if (assignedWaiterId) {
+    await enqueueOrderWaiterAssigned(order.id, restaurant.id, assignedWaiterId);
   }
 
   return {

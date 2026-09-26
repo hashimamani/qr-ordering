@@ -22,6 +22,7 @@ export interface ApiStackProps extends StackProps {
   dbName: string;
   appSecret: secretsmanager.Secret;
   notificationsQueue: sqs.Queue;
+  reportingQueue: sqs.Queue;
   connectionsTable: dynamodb.Table;
   webSocketEndpoint: string;
   publicBaseUrl: string;
@@ -63,12 +64,34 @@ export class ApiStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
       runtime: NODEJS_RUNTIME,
-      memorySize: 512,
-      timeout: Duration.seconds(15),
+      // Bumped from 512MB/15s for the new PDF/XLSX report exports --
+      // Lambda CPU scales with memory, and generation is CPU-bound, so
+      // this is close to cost-neutral (duration roughly halves). 29s, not
+      // 30, so the Lambda times out first with a real error instead of an
+      // opaque API Gateway 504 at its hard 30s integration cap.
+      memorySize: 1024,
+      timeout: Duration.seconds(29),
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
       logGroup,
+      bundling: {
+        // pdfkit resolves its standard fonts (getStandardFont ->
+        // require('#standard-fonts/Helvetica')) via Node's package
+        // "imports" (#-prefixed) field, and its ICC color profile via a
+        // path relative to its own module location -- both need pdfkit's
+        // real node_modules directory (and its package.json) intact on
+        // disk at runtime. esbuild flattens everything it bundles into
+        // one file with no such directory, which breaks both mechanisms.
+        // Confirmed live against an actual esbuild-bundled copy of this
+        // Lambda: PDF export 500'd with "Cannot find module
+        // '#standard-fonts/Helvetica'" until pdfkit was excluded from
+        // bundling here. Excluding it makes CDK npm-install it unbundled
+        // next to the bundled code instead, so its own file layout stays
+        // whole -- the standard, supported way to handle an npm package
+        // that isn't safely bundleable.
+        nodeModules: ['pdfkit'],
+      },
       environment: {
         DB_SECRET_ARN: props.dbInstance.secret!.secretArn,
         APP_SECRET_ARN: props.appSecret.secretArn,
@@ -76,6 +99,7 @@ export class ApiStack extends Stack {
         DB_PORT: props.dbInstance.instanceEndpoint.port.toString(),
         DB_NAME: props.dbName,
         SQS_NOTIFICATIONS_QUEUE_URL: props.notificationsQueue.queueUrl,
+        SQS_REPORTING_QUEUE_URL: props.reportingQueue.queueUrl,
         WS_CONNECTIONS_TABLE: props.connectionsTable.tableName,
         WEBSOCKET_MANAGEMENT_ENDPOINT: props.webSocketEndpoint,
         PUBLIC_BASE_URL: props.publicBaseUrl,
@@ -88,6 +112,7 @@ export class ApiStack extends Stack {
     props.dbInstance.secret!.grantRead(fn);
     props.appSecret.grantRead(fn);
     props.notificationsQueue.grantSendMessages(fn);
+    props.reportingQueue.grantSendMessages(fn);
     props.connectionsTable.grantReadWriteData(fn); // reads room-index, prunes stale (410) connections
 
     fn.addToRolePolicy(

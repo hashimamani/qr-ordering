@@ -1,9 +1,14 @@
 import { verifyStaffToken } from '../lib/jwt';
 
-export type Destination = 'kitchen' | 'bar';
+// 'admin' isn't a real order_item_destination -- it's a room suffix
+// reusing this same slot, deliberately, so isAuthorizedForRestaurantRoom's
+// existing `payload.role === 'admin' -> true` early return (and its
+// `payload.role === destination` fallback correctly rejecting kitchen/bar/
+// waiter roles from it) covers this room with zero new authorization logic.
+export type Destination = 'kitchen' | 'bar' | 'admin';
 
 export const ORDER_ROOM = /^order:[A-Za-z0-9-]+$/;
-export const RESTAURANT_ROOM = /^restaurant:([0-9a-fA-F-]{36}):(kitchen|bar)$/;
+export const RESTAURANT_ROOM = /^restaurant:([0-9a-fA-F-]{36}):(kitchen|bar|admin)$/;
 // Each waiter joins their own personal room rather than a shared
 // restaurant-wide one, since waiters only ever act on tables assigned to
 // them -- see admin/tables.repository.ts's assignNextWaiterRoundRobin.

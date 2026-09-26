@@ -18,6 +18,7 @@ export interface MenuItem {
 export interface MenuItemForPricing extends MenuItem {
   restaurant_id: string;
   destination: 'kitchen' | 'bar';
+  category_name: string | null;
 }
 
 // Deliberately excludes destination -- this is the customer-facing menu
@@ -75,6 +76,9 @@ export async function listMenuForRestaurantAdmin(
  * Fetches the authoritative, tenant-scoped menu items an order is being
  * placed against. Always called with the ids the customer submitted so
  * price/availability/destination come from the database, never the client.
+ * Includes category_name (a plain LEFT JOIN, no extra round trip) purely
+ * so order placement can snapshot it onto the order_placed reporting
+ * event without a second lookup -- see modules/reports/events/.
  */
 export async function findMenuItemsByIds(
   restaurantId: string,
@@ -82,9 +86,11 @@ export async function findMenuItemsByIds(
 ): Promise<MenuItemForPricing[]> {
   if (menuItemIds.length === 0) return [];
   const result = await query<MenuItemForPricing>(
-    `SELECT id, restaurant_id, category_id, name, description, price, destination, is_available
-     FROM menu_item
-     WHERE restaurant_id = $1 AND id = ANY($2::uuid[])`,
+    `SELECT mi.id, mi.restaurant_id, mi.category_id, mi.name, mi.description, mi.price,
+            mi.destination, mi.is_available, mc.name AS category_name
+     FROM menu_item mi
+     LEFT JOIN menu_category mc ON mc.id = mi.category_id
+     WHERE mi.restaurant_id = $1 AND mi.id = ANY($2::uuid[])`,
     [restaurantId, menuItemIds],
   );
   return result.rows;

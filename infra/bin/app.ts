@@ -4,9 +4,11 @@ import { NetworkStack } from '../lib/network-stack';
 import { DataStack } from '../lib/data-stack';
 import { RealtimeDataStack } from '../lib/realtime-data-stack';
 import { QueueStack } from '../lib/queue-stack';
+import { ReportingQueueStack } from '../lib/reporting-queue-stack';
 import { WebSocketStack } from '../lib/websocket-stack';
 import { ApiStack } from '../lib/api-stack';
 import { NotificationWorkerStack } from '../lib/notification-worker-stack';
+import { ReportingWorkerStack } from '../lib/reporting-worker-stack';
 import { MigrationStack } from '../lib/migration-stack';
 import { FrontendStack } from '../lib/frontend-stack';
 
@@ -41,6 +43,7 @@ const data = new DataStack(app, 'QrOrderingData', {
 const realtimeData = new RealtimeDataStack(app, 'QrOrderingRealtimeData', { env });
 
 const queue = new QueueStack(app, 'QrOrderingQueue', { env });
+const reportingQueue = new ReportingQueueStack(app, 'QrOrderingReportingQueue', { env });
 
 const webSocket = new WebSocketStack(app, 'QrOrderingWebSocket', {
   env,
@@ -56,6 +59,7 @@ const api = new ApiStack(app, 'QrOrderingApi', {
   dbName: data.dbName,
   appSecret: data.appSecret,
   notificationsQueue: queue.notificationsQueue,
+  reportingQueue: reportingQueue.reportingQueue,
   connectionsTable: realtimeData.connectionsTable,
   webSocketEndpoint: webSocket.webSocketEndpoint,
   publicBaseUrl: frontendUrl,
@@ -73,6 +77,19 @@ new NotificationWorkerStack(app, 'QrOrderingNotificationWorker', {
   appSecret: data.appSecret,
   notificationsQueue: queue.notificationsQueue,
   deadLetterQueue: queue.deadLetterQueue,
+});
+
+new ReportingWorkerStack(app, 'QrOrderingReportingWorker', {
+  env,
+  vpc: network.vpc,
+  lambdaSecurityGroup: network.lambdaSecurityGroup,
+  dbInstance: data.instance,
+  dbName: data.dbName,
+  appSecret: data.appSecret,
+  reportingQueue: reportingQueue.reportingQueue,
+  deadLetterQueue: reportingQueue.deadLetterQueue,
+  connectionsTable: realtimeData.connectionsTable,
+  webSocketEndpoint: webSocket.webSocketEndpoint,
 });
 
 new MigrationStack(app, 'QrOrderingMigration', {

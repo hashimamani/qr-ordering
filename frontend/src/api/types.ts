@@ -147,3 +147,51 @@ export interface IdleTable {
   id: string;
   table_number: string;
 }
+
+// Money is always a decimal string (matches MenuItem.price above) --
+// never a JS number, to avoid float drift on sums. Rendered with
+// Number(...) at display time, same as everywhere else in this app.
+
+export interface ReportTotals {
+  gross_sales: string;
+  paid_sales: string;
+  unpaid_sales: string;
+  order_count: number;
+  item_count: number;
+  average_order_value: string;
+}
+
+export interface TodaySummary extends ReportTotals {
+  date: string;
+}
+
+export interface DayBucket {
+  day: string;
+  gross_sales: string;
+  paid_sales: string;
+  order_count: number;
+}
+
+export interface ReportSummary {
+  from: string;
+  to: string;
+  totals: ReportTotals;
+  by_day: DayBucket[];
+}
+
+export type BreakdownDimension = 'menu_item' | 'category' | 'waiter' | 'table';
+
+export interface BreakdownRow {
+  key: string | null;
+  label: string;
+  quantity: number;
+  gross_sales: string;
+  paid_sales: string;
+  order_count: number;
+  share_of_sales: number;
+}
+
+export interface BreakdownResponse {
+  dimension: BreakdownDimension;
+  rows: BreakdownRow[];
+}

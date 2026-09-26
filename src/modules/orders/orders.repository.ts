@@ -24,7 +24,19 @@ export interface CreatedOrder {
   submitted_at: string;
 }
 
-export async function insertOrder(input: CreateOrderInput): Promise<CreatedOrder> {
+export interface CreatedOrderItem {
+  id: string;
+  menu_item_id: string;
+}
+
+/**
+ * order_item ids come back alongside the order so the caller can snapshot
+ * them (as order_item_id) onto the order_placed reporting event -- purely
+ * for that purpose, this table is never written to for its own sake here.
+ */
+export async function insertOrder(
+  input: CreateOrderInput,
+): Promise<{ order: CreatedOrder; items: CreatedOrderItem[] }> {
   const client: PoolClient = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -43,16 +55,19 @@ export async function insertOrder(input: CreateOrderInput): Promise<CreatedOrder
     );
     const order = orderResult.rows[0];
 
+    const items: CreatedOrderItem[] = [];
     for (const item of input.items) {
-      await client.query(
+      const itemResult = await client.query<CreatedOrderItem>(
         `INSERT INTO order_item (order_id, menu_item_id, quantity, notes, destination)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, menu_item_id`,
         [order.id, item.menu_item_id, item.quantity, item.notes ?? null, item.destination],
       );
+      items.push(itemResult.rows[0]);
     }
 
     await client.query('COMMIT');
-    return order;
+    return { order, items };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -91,14 +106,15 @@ export async function findOrderNotificationContext(orderId: string): Promise<Ord
  * Addressed by public_token, not the internal id, matching every other
  * staff-facing order lookup (Order.id is never serialized anywhere).
  */
-export async function markOrderAsPaid(restaurantId: string, publicToken: string): Promise<void> {
-  const result = await query(
-    `UPDATE "order" SET payment_status = 'paid' WHERE public_token = $1 AND restaurant_id = $2`,
+export async function markOrderAsPaid(restaurantId: string, publicToken: string): Promise<{ id: string }> {
+  const result = await query<{ id: string }>(
+    `UPDATE "order" SET payment_status = 'paid' WHERE public_token = $1 AND restaurant_id = $2 RETURNING id`,
     [publicToken, restaurantId],
   );
   if (result.rowCount === 0) {
     throw new NotFoundError('Order not found');
   }
+  return result.rows[0];
 }
 
 /**
