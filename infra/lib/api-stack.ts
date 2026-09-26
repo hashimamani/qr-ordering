@@ -92,8 +92,17 @@ export class ApiStack extends Stack {
 
     fn.addToRolePolicy(
       new iam.PolicyStatement({
+        // Unlike the WebSocket Lambda's PostToConnection-only replies,
+        // this Lambda also force-closes a room's connections once an
+        // order is fully complete (see realtime/dynamoBroadcaster.ts) --
+        // DeleteConnection's IAM resource ARN uses the actual "DELETE"
+        // verb, not "POST", confirmed live (AccessDeniedException named
+        // the DELETE-method ARN when only POST was granted).
         actions: ['execute-api:ManageConnections'],
-        resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*/POST/@connections/*`],
+        resources: [
+          `arn:aws:execute-api:${this.region}:${this.account}:*/*/POST/@connections/*`,
+          `arn:aws:execute-api:${this.region}:${this.account}:*/*/DELETE/@connections/*`,
+        ],
       }),
     );
 

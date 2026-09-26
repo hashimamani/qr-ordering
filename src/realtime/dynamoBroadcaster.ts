@@ -49,14 +49,13 @@ export async function dynamoBroadcast(room: string, event: Record<string, unknow
 }
 
 /**
- * Forcibly ends every connection subscribed to `room` -- the IAM
- * resource ARN for execute-api:ManageConnections is always written with
- * "POST" regardless of which of PostToConnection/GetConnection/
- * DeleteConnection is actually called, so this needs no extra grant
- * beyond the one dynamoBroadcast already relies on. DeleteConnection
- * fires $disconnect for that connection, which prunes its row from
- * WS_CONNECTIONS_TABLE -- deleted here too so a broadcast racing this
- * teardown doesn't still find it via the room-index.
+ * Forcibly ends every connection subscribed to `room` -- needs its own
+ * IAM grant for the DELETE-method @connections ARN (see api-stack.ts;
+ * confirmed live that DeleteConnection's resource ARN uses "DELETE", not
+ * "POST" like PostToConnection). DeleteConnection fires $disconnect for
+ * that connection, which prunes its row from WS_CONNECTIONS_TABLE --
+ * deleted here too so a broadcast racing this teardown doesn't still
+ * find it via the room-index.
  */
 export async function dynamoCloseRoom(room: string): Promise<void> {
   const tableName = process.env.WS_CONNECTIONS_TABLE;
