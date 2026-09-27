@@ -9,6 +9,9 @@ import {
   updateMenuItemSchema,
   createTableSchema,
   assignWaiterSchema,
+  destinationParamSchema,
+  overrideStatusSchema,
+  activityQuerySchema,
 } from '../modules/admin/admin.validation';
 import { createStaffUserSchema, updateStaffUserSchema } from '../modules/staff/staff.validation';
 import {
@@ -34,6 +37,8 @@ import { findRestaurantById } from '../modules/tables/tables.repository';
 import { ForbiddenError } from '../lib/errors';
 import { dateRangeSchema, breakdownQuerySchema, exportQuerySchema } from '../modules/reports/reports.validation';
 import { getTodaySummary, getSummary, getBreakdown, renderExport } from '../modules/reports/reports.service';
+import { getStationBoard, updateOrderItemStatus } from '../modules/orderItems/orderItems.service';
+import { listRecentActivity } from '../modules/orderItems/orderItems.repository';
 
 export const adminRoutes = Router();
 
@@ -290,5 +295,55 @@ adminRoutes.get(
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(body);
+  }),
+);
+
+// --- Station boards + admin overrides -------------------------------
+//
+// The admin's own view of the kitchen/bar queues: same underlying items
+// the station sees at /staff/:destination, but bucketed by status rather
+// than by table, carrying table + waiter attribution, and including the
+// work already completed today.
+//
+// Acting on an item from here is always an *override* -- the admin is
+// reaching past whoever owns that station -- so it goes through its own
+// endpoint rather than a role branch inside the staff one. That keeps
+// the staff route's semantics untouched, confines backward transitions
+// to a single place, and makes the intent unambiguous in the audit trail
+// (order_item_status_audit.is_override).
+
+adminRoutes.get(
+  '/admin/stations/:destination',
+  asyncHandler(async (req, res) => {
+    const parsed = destinationParamSchema.safeParse(req.params);
+    if (!parsed.success) throw new ValidationError('Unknown station', parsed.error.flatten());
+    const board = await getStationBoard(req.staff!.restaurantId, parsed.data.destination);
+    res.json(board);
+  }),
+);
+
+adminRoutes.patch(
+  '/admin/order-items/:id/status',
+  asyncHandler(async (req, res) => {
+    const parsed = overrideStatusSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid override', parsed.error.flatten());
+    await updateOrderItemStatus(
+      req.staff!.restaurantId,
+      req.params.id,
+      parsed.data.status,
+      { id: req.staff!.sub, role: req.staff!.role },
+      { allowBackward: true, isOverride: true, reason: parsed.data.reason },
+    );
+    res.status(204).send();
+  }),
+);
+
+adminRoutes.get(
+  '/admin/activity',
+  asyncHandler(async (req, res) => {
+    const parsed = activityQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw new ValidationError('Invalid activity request', parsed.error.flatten());
+    const entries = await listRecentActivity(req.staff!.restaurantId, parsed.data.limit);
+    res.json({ entries });
   }),
 );

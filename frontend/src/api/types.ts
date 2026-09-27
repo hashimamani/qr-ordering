@@ -195,3 +195,42 @@ export interface BreakdownResponse {
   dimension: BreakdownDimension;
   rows: BreakdownRow[];
 }
+
+export interface StationItem {
+  order_item_id: string;
+  order_id: string;
+  order_public_token: string;
+  table_id: string;
+  table_number: string;
+  menu_item_name: string;
+  quantity: number;
+  notes: string | null;
+  status: OrderItemStatus;
+  submitted_at: string;
+  /** The table's current assignee -- populated while the session is open. */
+  waiter_name: string | null;
+  /** Who moved it to served, from the audit trail (served column only). */
+  served_by_name: string | null;
+}
+
+export interface StationBoard {
+  pending: StationItem[];
+  preparing: StationItem[];
+  ready: StationItem[];
+  served: StationItem[];
+}
+
+export interface ActivityEntry {
+  id: string;
+  actor_name: string;
+  actor_role: StaffRole;
+  from_status: OrderItemStatus;
+  to_status: OrderItemStatus;
+  is_override: boolean;
+  is_backward: boolean;
+  reason: string | null;
+  created_at: string;
+  menu_item_name: string;
+  table_number: string;
+  order_public_token: string;
+}

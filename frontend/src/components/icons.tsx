@@ -177,3 +177,100 @@ export function LogOutIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function LayoutGridIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+export function ChefHatIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 18h12v2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-2Z" />
+      <path d="M6 18v-4.1A4 4 0 0 1 4 6.5 4 4 0 0 1 8.3 4a4.2 4.2 0 0 1 7.4 0A4 4 0 0 1 20 6.5a4 4 0 0 1-2 7.4V18" />
+    </svg>
+  );
+}
+
+export function GlassIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 3h14l-6 8v8" />
+      <path d="M9 21h6" />
+      <path d="M13 11 19 3" />
+    </svg>
+  );
+}
+
+export function LayoutFloorIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="9" r="4" />
+      <path d="M12 13v8" />
+      <path d="M8 21h8" />
+      <path d="M3 5h4" />
+      <path d="M17 5h4" />
+    </svg>
+  );
+}
+
+export function SlidersIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 6h10" />
+      <path d="M18 6h2" />
+      <path d="M4 12h4" />
+      <path d="M12 12h8" />
+      <path d="M4 18h12" />
+      <path d="M20 18h0" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="10" cy="12" r="2" />
+      <circle cx="18" cy="18" r="2" />
+    </svg>
+  );
+}
+
+export function HistoryIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+export function ShieldAlertIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3Z" />
+      <path d="M12 8v4" />
+      <circle cx="12" cy="15.5" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function UndoIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h11a5 5 0 0 1 0 10H9" />
+    </svg>
+  );
+}
+
+export function MenuIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
+  );
+}

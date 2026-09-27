@@ -1,11 +1,17 @@
 import {
   listOrderItemsByDestination,
+  listStationBoard,
   transitionOrderItemStatus,
+  type AuditActor,
   type Destination,
   type OrderItemStatus,
   type QueuedOrderItem,
+  type StationBoardItem,
+  type TransitionOptions,
 } from './orderItems.repository';
+import { toNairobiDateString } from '../../lib/reportDate';
 import { findOrderNotificationContext } from '../orders/orders.repository';
+import { findStaffUserById } from '../staff/staff.repository';
 import { finalizeOrderIfComplete } from '../orders/orders.service';
 import { findOrderByPublicToken } from '../tracking/tracking.repository';
 import { getNotificationQueue } from '../notifications/notifications.queue';
@@ -27,12 +33,54 @@ export async function getQueueForDestination(
   return [...byTable.entries()].map(([table_number, items]) => ({ table_number, items }));
 }
 
+/** Max served-today rows the station board will return in one page. */
+const STATION_SERVED_LIMIT = 200;
+
+export interface StationBoard {
+  pending: StationBoardItem[];
+  preparing: StationBoardItem[];
+  ready: StationBoardItem[];
+  served: StationBoardItem[];
+}
+
+/**
+ * The admin station board: the same items the station's own queue shows,
+ * bucketed by status instead of by table, plus today's completed work.
+ * "Today" is resolved here (Africa/Nairobi) rather than in SQL so the
+ * timezone decision lives in one place -- the same helper the reporting
+ * pipeline uses.
+ */
+export async function getStationBoard(restaurantId: string, destination: Destination): Promise<StationBoard> {
+  const rows = await listStationBoard(
+    restaurantId,
+    destination,
+    toNairobiDateString(new Date()),
+    STATION_SERVED_LIMIT,
+  );
+  return {
+    pending: rows.filter((r) => r.status === 'received'),
+    preparing: rows.filter((r) => r.status === 'preparing'),
+    ready: rows.filter((r) => r.status === 'ready'),
+    served: rows.filter((r) => r.status === 'served'),
+  };
+}
+
 export async function updateOrderItemStatus(
   restaurantId: string,
   orderItemId: string,
   newStatus: OrderItemStatus,
+  actor: { id: string; role: AuditActor['role'] },
+  opts: TransitionOptions,
 ): Promise<void> {
-  const result = await transitionOrderItemStatus(restaurantId, orderItemId, newStatus);
+  // The JWT carries sub/role but not the display name, and the audit row
+  // snapshots the name so it survives the staff member being deleted --
+  // so one PK lookup here, rather than duplicating it in both callers.
+  const staff = await findStaffUserById(actor.id);
+  const result = await transitionOrderItemStatus(restaurantId, orderItemId, newStatus, {
+    id: actor.id,
+    role: actor.role,
+    name: staff?.name ?? 'Unknown',
+  }, opts);
 
   await broadcastEvent(`restaurant:${restaurantId}:${result.destination}`, {
     type: 'item_status_changed',
@@ -55,7 +103,12 @@ export async function updateOrderItemStatus(
     items: trackedOrder.items,
   });
 
-  if (newStatus === 'served') {
+  // Forward moves only. finalizeOrderIfComplete releases the order's
+  // websocket room for good once it's paid and fully served, so firing it
+  // while an admin is walking a status *backward* would tear down the
+  // customer's live tracking for an order that is, by that very action,
+  // no longer complete.
+  if (!result.isBackward && newStatus === 'served') {
     await finalizeOrderIfComplete(result.orderPublicToken);
   }
 

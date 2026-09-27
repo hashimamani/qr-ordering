@@ -1,4 +1,4 @@
-import type { DayBucket } from '../../api/types';
+import type { DayBucket } from '../../../api/types';
 
 /**
  * Hand-rolled inline SVG -- no charting library, consistent with this

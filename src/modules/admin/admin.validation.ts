@@ -37,3 +37,21 @@ export const createTableSchema = z.object({
 export const assignWaiterSchema = z.object({
   assigned_waiter_id: z.string().uuid(),
 });
+
+export const destinationParamSchema = z.object({
+  destination: z.enum(['kitchen', 'bar']),
+});
+
+// Note the absence of an ordering constraint here: unlike the staff
+// endpoint, an admin override may target *any* status, including one
+// earlier than the item's current one. The legality of the specific
+// move is decided in transitionOrderItemStatus, which knows the current
+// status; this only validates the shape.
+export const overrideStatusSchema = z.object({
+  status: z.enum(['received', 'preparing', 'ready', 'served']),
+  reason: z.string().max(500).trim().optional(),
+});
+
+export const activityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});

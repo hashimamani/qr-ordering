@@ -152,7 +152,16 @@ staffRoutes.patch(
     if (!allowedRoles.includes(req.staff!.role)) {
       throw new ForbiddenError('Your role cannot perform this action');
     }
-    await updateOrderItemStatus(req.staff!.restaurantId, req.params.id, parsed.data.status);
+    // allowBackward/isOverride false: this is the station's own queue
+    // acting on its own work. Admin corrections (including walking a
+    // status back) go through PATCH /admin/order-items/:id/status.
+    await updateOrderItemStatus(
+      req.staff!.restaurantId,
+      req.params.id,
+      parsed.data.status,
+      { id: req.staff!.sub, role: req.staff!.role },
+      { allowBackward: false, isOverride: false },
+    );
     res.status(204).send();
   }),
 );

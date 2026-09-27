@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { apiFetch, ApiError } from '../../api/client';
-import { downloadFile } from '../../api/download';
+import { apiFetch, ApiError } from '../../../api/client';
+import { downloadFile } from '../../../api/download';
 import type {
   TodaySummary,
   ReportSummary,
   BreakdownDimension,
   BreakdownResponse,
-} from '../../api/types';
-import { useAuth } from '../../auth/AuthContext';
-import { useRealtime } from '../../hooks/useRealtime';
-import { useToast } from '../../components/ToastProvider';
-import { DownloadIcon } from '../../components/icons';
+} from '../../../api/types';
+import { useAuth } from '../../../auth/AuthContext';
+import { useRealtime } from '../../../hooks/useRealtime';
+import { useToast } from '../../../components/ToastProvider';
+import { DownloadIcon } from '../../../components/icons';
 import { RevenueBarChart } from './RevenueBarChart';
 
 type Preset = 'today' | '7d' | '30d' | 'this_month' | 'last_month';
@@ -58,7 +58,7 @@ function money(v: string): string {
   return `KSh ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function AdminReportsTab() {
+export function OverviewSection() {
   const { session } = useAuth();
   const showToast = useToast();
 
@@ -98,7 +98,13 @@ export function AdminReportsTab() {
   const { connected } = useRealtime(
     session ? `restaurant:${session.restaurantId}:admin` : null,
     session?.token ?? null,
-    () => loadToday(),
+    // The admin room carries floor traffic too (broadcastToTableWaiter
+    // mirrors every waiter-facing event into it for the Floor section),
+    // so match on the reporting worker's own event rather than
+    // refetching the day's totals on every item status change.
+    (event) => {
+      if (event.type === 'sales_changed') loadToday();
+    },
   );
 
   async function handleExport(format: 'csv' | 'pdf' | 'xlsx') {
@@ -119,6 +125,13 @@ export function AdminReportsTab() {
 
   return (
     <div>
+      <div className="admin-section-header">
+        <div>
+          <h2>Overview</h2>
+          <p className="sub">Live sales today, historical reporting, and downloadable reports.</p>
+        </div>
+      </div>
+
       {loadError && <div className="error-banner">{loadError}</div>}
 
       <div className="stat-grid" style={{ marginBottom: 20 }}>

@@ -14,6 +14,16 @@ export async function broadcastToTableWaiter(
   tableId: string,
   event: Record<string, unknown>,
 ): Promise<void> {
+  // The admin console's Floor section watches every table, not just one
+  // waiter's, and waiter rooms are per-staff-member so it can't simply
+  // join them all. Mirroring each waiter-facing event into the shared
+  // admin room here covers all four call sites at once.
+  //
+  // The admin room is shared with the reporting worker's 'sales_changed'
+  // broadcasts, so admin-side listeners must switch on event.type rather
+  // than refetching on anything that arrives.
+  await broadcastEvent(`restaurant:${restaurantId}:admin`, event);
+
   const assignedWaiterId = await findAssignedWaiterForTable(tableId);
   if (assignedWaiterId) {
     await broadcastEvent(`restaurant:${restaurantId}:waiter:${assignedWaiterId}`, event);

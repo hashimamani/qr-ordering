@@ -10,7 +10,11 @@ import { LoginPage } from './pages/staff/LoginPage';
 import { KitchenPage } from './pages/staff/KitchenPage';
 import { BarPage } from './pages/staff/BarPage';
 import { WaiterPage } from './pages/staff/WaiterPage';
-import { AdminPage } from './pages/admin/AdminPage';
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { OverviewSection } from './pages/admin/sections/OverviewSection';
+import { StationBoardSection } from './pages/admin/sections/StationBoardSection';
+import { FloorSection } from './pages/admin/sections/FloorSection';
+import { ManagementSection } from './pages/admin/sections/ManagementSection';
 import { PlatformAdminLoginPage } from './pages/platform-admin/PlatformAdminLoginPage';
 import { PlatformAdminDashboardPage } from './pages/platform-admin/PlatformAdminDashboardPage';
 
@@ -49,14 +53,26 @@ export function App() {
                   </ProtectedRoute>
                 }
               />
+              {/* Nested rather than tab state so each admin section is
+                  deep-linkable and survives a refresh. */}
               <Route
                 path="/admin"
                 element={
                   <ProtectedRoute allowedRoles={['admin']}>
-                    <AdminPage />
+                    <AdminLayout />
                   </ProtectedRoute>
                 }
-              />
+              >
+                <Route index element={<Navigate to="/admin/overview" replace />} />
+                <Route path="overview" element={<OverviewSection />} />
+                <Route
+                  path="kitchen"
+                  element={<StationBoardSection destination="kitchen" title="Kitchen" />}
+                />
+                <Route path="bar" element={<StationBoardSection destination="bar" title="Bar" />} />
+                <Route path="floor" element={<FloorSection />} />
+                <Route path="management" element={<ManagementSection />} />
+              </Route>
               <Route path="/platform-admin/login" element={<PlatformAdminLoginPage />} />
               <Route
                 path="/platform-admin"
