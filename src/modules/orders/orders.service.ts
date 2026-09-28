@@ -10,13 +10,20 @@ import {
   type RestaurantTable,
 } from '../tables/tables.repository';
 import { findMenuItemsByIds } from '../menu/menu.repository';
-import { insertOrder, markOrderAsPaid, isOrderFullyComplete, type CreateOrderItemInput } from './orders.repository';
+import {
+  insertOrder,
+  markOrderAsPaid,
+  isOrderFullyComplete,
+  findOrderNotificationContext,
+  type CreateOrderItemInput,
+} from './orders.repository';
 import { generateToken } from '../../lib/token';
 import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { getReportingQueue } from '../reports/events/reportingEvents.queue';
+import { issueReceiptForOrder } from '../receipts/receipts.service';
 import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../../realtime/webPush';
@@ -62,6 +69,7 @@ async function createOrderForTable(
       quantity: requested.quantity,
       notes: requested.notes,
       destination: menuItem.destination,
+      unit_price: menuItem.price,
     };
   });
 
@@ -191,7 +199,46 @@ export async function markOrderPaid(restaurantId: string, publicToken: string): 
   } catch (err) {
     logger.error({ err, orderId }, 'failed to enqueue order_paid reporting event');
   }
+  await issueAndSendReceipt(orderId);
   await finalizeOrderIfComplete(publicToken);
+}
+
+/**
+ * Mints the receipt link and sends it to the contact on the order --
+ * never to whoever triggered the payment, per the rule recorded on
+ * order.contact_value in the initial schema.
+ *
+ * Entirely best-effort: a waiter marking a table paid is the critical
+ * path, and a paid-but-un-receipted order is recoverable in a way that a
+ * payment which 500s is not. Nothing in here may throw outward.
+ */
+async function issueAndSendReceipt(orderId: string): Promise<void> {
+  try {
+    const issued = await issueReceiptForOrder(orderId);
+    // undefined means a link already existed; only the original token
+    // works, so sending again would deliver a dead link.
+    if (!issued) return;
+
+    const context = await findOrderNotificationContext(orderId);
+    if (!context) {
+      logger.error({ orderId }, 'receipt issued but order has no contact context; not sending');
+      return;
+    }
+
+    await getNotificationQueue().enqueue({
+      orderId,
+      channel: context.contact_channel,
+      contactValue: context.contact_value,
+      trigger: 'receipt',
+      templateData: {
+        restaurantName: context.restaurant_name,
+        trackingUrl: trackingUrlFor(context.public_token),
+        receiptUrl: issued.url,
+      },
+    });
+  } catch (err) {
+    logger.error({ err, orderId }, 'failed to issue or send receipt');
+  }
 }
 
 /**

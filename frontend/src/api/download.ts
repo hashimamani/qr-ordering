@@ -6,8 +6,17 @@ import { API_BASE, ApiError } from './client';
  * in the app -- there's no existing pattern to extend (the QR code is
  * only ever shown inline as a data: URI, never actually downloaded).
  */
-export async function downloadFile(path: string, filename: string): Promise<void> {
-  const token = sessionStorage.getItem('staffToken');
+export async function downloadFile(
+  path: string,
+  filename: string,
+  /**
+   * An explicit bearer token, for callers outside the staff session --
+   * the receipt page holds a short-lived download grant rather than a
+   * staff token. Omitted, it falls back to the staff session as before.
+   */
+  explicitToken?: string,
+): Promise<void> {
+  const token = explicitToken ?? sessionStorage.getItem('staffToken');
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 

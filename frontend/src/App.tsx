@@ -6,6 +6,7 @@ import { PlatformAdminProtectedRoute } from './auth/PlatformAdminProtectedRoute'
 import { ToastProvider } from './components/ToastProvider';
 import { OrderPage } from './pages/customer/OrderPage';
 import { TrackPage } from './pages/customer/TrackPage';
+import { ReceiptPage } from './pages/customer/ReceiptPage';
 import { LoginPage } from './pages/staff/LoginPage';
 import { KitchenPage } from './pages/staff/KitchenPage';
 import { BarPage } from './pages/staff/BarPage';
@@ -28,6 +29,9 @@ export function App() {
               <Route path="/" element={<Navigate to="/staff/login" replace />} />
               <Route path="/order" element={<OrderPage />} />
               <Route path="/track/:token" element={<TrackPage />} />
+              {/* Public like the tracking page -- gated by the link plus a
+                  challenge, not by a staff session. */}
+              <Route path="/receipt/:token" element={<ReceiptPage />} />
               <Route path="/staff/login" element={<LoginPage />} />
               <Route
                 path="/staff/kitchen"

@@ -7,6 +7,12 @@ export interface CreateOrderItemInput {
   quantity: number;
   notes?: string;
   destination: 'kitchen' | 'bar';
+  /**
+   * The price this line is sold at, captured now. menu_item.price is
+   * editable, so anything that reconstructs an order's value later --
+   * a receipt above all -- must read this, not the menu.
+   */
+  unit_price: string;
 }
 
 export interface CreateOrderInput {
@@ -58,10 +64,17 @@ export async function insertOrder(
     const items: CreatedOrderItem[] = [];
     for (const item of input.items) {
       const itemResult = await client.query<CreatedOrderItem>(
-        `INSERT INTO order_item (order_id, menu_item_id, quantity, notes, destination)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO order_item (order_id, menu_item_id, quantity, notes, destination, unit_price)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, menu_item_id`,
-        [order.id, item.menu_item_id, item.quantity, item.notes ?? null, item.destination],
+        [
+          order.id,
+          item.menu_item_id,
+          item.quantity,
+          item.notes ?? null,
+          item.destination,
+          item.unit_price,
+        ],
       );
       items.push(itemResult.rows[0]);
     }

@@ -245,3 +245,32 @@ export interface ActivityEntry {
   table_number: string;
   order_public_token: string;
 }
+
+export interface ReceiptChallengePrompt {
+  channel: 'sms' | 'email';
+  hint: string;
+}
+
+export interface ReceiptLineItem {
+  menu_item_name: string;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+}
+
+export interface ReceiptDetail {
+  order_public_token: string;
+  submitted_at: string;
+  paid_at: string;
+  restaurant_name: string;
+  brand_color: string | null;
+  table_number: string;
+  items: ReceiptLineItem[];
+  total: string;
+  prices_reconstructed: boolean;
+}
+
+export interface VerifiedReceipt {
+  receipt: ReceiptDetail;
+  download_grant: string;
+}

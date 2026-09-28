@@ -11,6 +11,12 @@ import {
   assignNextWaiterRoundRobin,
   markTableCalling,
 } from '../modules/tables/tables.repository';
+import {
+  describeReceiptChallenge,
+  verifyAndLoadReceipt,
+  loadReceiptForDownload,
+} from '../modules/receipts/receipts.service';
+import { verifyReceiptChallengeSchema } from '../modules/receipts/receipts.validation';
 import { broadcastToTableWaiter } from '../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../realtime/webPush';
 
@@ -70,5 +76,57 @@ customerRoutes.post(
       });
     }
     res.status(204).send();
+  }),
+);
+
+// --- Receipts --------------------------------------------------------
+//
+// Public, but two-factor by construction: possession of an unguessable
+// link plus proof of the contact it was sent to. The link is only ever
+// delivered to order.contact_value, honouring the rule recorded on that
+// column in the initial schema -- the receipt goes back to the contact on
+// the order, never to whoever asks for it.
+//
+// Rate limits are tighter than the tracking endpoints because the second
+// factor for an SMS order is only four digits. The per-receipt attempt
+// counter in receipts.service.ts is what actually caps brute force, since
+// an IP limit alone can be sidestepped by rotating addresses.
+
+customerRoutes.get(
+  '/receipt/:token',
+  fixedWindowRateLimit({ windowMs: 60_000, max: 10 }),
+  asyncHandler(async (req, res) => {
+    const prompt = await describeReceiptChallenge(req.params.token);
+    res.json(prompt);
+  }),
+);
+
+customerRoutes.post(
+  '/receipt/:token/verify',
+  fixedWindowRateLimit({ windowMs: 60_000, max: 5 }),
+  asyncHandler(async (req, res) => {
+    const parsed = verifyReceiptChallengeSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid request', parsed.error.flatten());
+    const result = await verifyAndLoadReceipt(req.params.token, parsed.data.answer);
+    res.json(result);
+  }),
+);
+
+customerRoutes.get(
+  '/receipt/:token/pdf',
+  fixedWindowRateLimit({ windowMs: 60_000, max: 10 }),
+  asyncHandler(async (req, res) => {
+    const grant = (req.headers.authorization ?? '').replace(/^Bearer /, '');
+    const receipt = await loadReceiptForDownload(req.params.token, grant);
+    // Lazy import for the same reason the report exporters use one: keep
+    // pdfkit off the cold-start path of a Lambda that also places orders.
+    const { renderReceiptPdf } = await import('../modules/receipts/receipts.pdf');
+    const body = await renderReceiptPdf(receipt);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="receipt_${receipt.order_public_token.slice(0, 8)}.pdf"`,
+    );
+    res.send(body);
   }),
 );
