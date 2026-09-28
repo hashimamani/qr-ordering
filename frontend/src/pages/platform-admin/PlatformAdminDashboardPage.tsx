@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TAB_BRAND_COLOR, derivePalette } from '../../lib/brandPalette';
+import { PasswordInput } from '../../components/PasswordInput';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { RestaurantAdmin, RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
@@ -185,8 +186,8 @@ export function PlatformAdminDashboardPage() {
             </div>
           </div>
           <label>Admin password (8+ characters)</label>
-          <input
-            type="password"
+          <PasswordInput
+            autoCompleteMode="new"
             value={form.admin_password}
             onChange={(e) => setForm({ ...form, admin_password: e.target.value })}
           />
@@ -241,8 +242,8 @@ export function PlatformAdminDashboardPage() {
                   <div className="item-desc">{a.phone_or_email}</div>
                 </div>
                 <div>
-                  <input
-                    type="password"
+                  <PasswordInput
+                    autoCompleteMode="new"
                     placeholder="New password (8+ chars)"
                     value={resetPasswords[a.id] ?? ''}
                     onChange={(e) => setResetPasswords((prev) => ({ ...prev, [a.id]: e.target.value }))}

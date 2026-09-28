@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../../api/client';
 import type { PlatformAdminLoginResponse } from '../../api/types';
 import { usePlatformAdminAuth } from '../../auth/PlatformAdminAuthContext';
 import { useToast } from '../../components/ToastProvider';
+import { PasswordInput } from '../../components/PasswordInput';
 
 export function PlatformAdminLoginPage() {
   const { login } = usePlatformAdminAuth();
@@ -40,7 +41,11 @@ export function PlatformAdminLoginPage() {
           <label htmlFor="email">Email</label>
           <input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <button className="primary" disabled={loading} onClick={submit}>
             {loading ? 'Logging in…' : 'Log in'}
           </button>

@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../../api/client';
 import type { LoginResponse, StaffRole } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/ToastProvider';
+import { PasswordInput } from '../../components/PasswordInput';
 
 const ROLE_DESTINATION: Record<StaffRole, string> = {
   admin: '/admin',
@@ -68,7 +69,11 @@ export function LoginPage() {
             spellCheck={false}
           />
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <button className="primary" disabled={loading} onClick={submit}>
             {loading ? 'Logging in…' : 'Log in'}
           </button>

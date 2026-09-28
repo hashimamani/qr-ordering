@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
+import { PasswordInput } from '../../components/PasswordInput';
 
 interface EditState {
   name: string;
@@ -132,7 +133,11 @@ export function AdminStaffTab() {
           </div>
         </div>
         <label>Password (8+ characters)</label>
-        <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <PasswordInput
+          autoCompleteMode="new"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+        />
         <button className="primary" disabled={creating} onClick={addStaff}>
           {creating ? 'Adding…' : 'Add staff login'}
         </button>
@@ -224,8 +229,8 @@ export function AdminStaffTab() {
               </div>
             </div>
             <label>New password (leave blank to keep current)</label>
-            <input
-              type="password"
+            <PasswordInput
+              autoCompleteMode="new"
               value={editForm.password}
               onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
             />
