@@ -105,6 +105,10 @@ export class ApiStack extends Stack {
         PUBLIC_BASE_URL: props.publicBaseUrl,
         PUBLIC_ORDERING_BASE_URL: props.publicOrderingBaseUrl,
         NOTIFICATIONS_DRY_RUN: 'false',
+        // How long a customer's receipt link stays live. Set explicitly
+        // rather than left to the code default so the knob is visible
+        // here, where someone changing the policy would look for it.
+        RECEIPT_LINK_TTL_HOURS: '24',
         LOG_LEVEL: 'info',
       },
     });
