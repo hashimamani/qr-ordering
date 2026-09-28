@@ -6,7 +6,8 @@ import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
-import { QrCodeIcon, TrashIcon, UsersIcon } from '../../components/icons';
+import { DownloadIcon, QrCodeIcon, TrashIcon, UsersIcon } from '../../components/icons';
+import { downloadFile } from '../../api/download';
 
 // The frontend's own origin is the customer ordering base -- this static
 // build is what the QR code needs to point at, not the API's domain.
@@ -23,6 +24,7 @@ export function AdminTablesTab() {
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<CreatedTableWithQr | null>(null);
   const [qrPreviews, setQrPreviews] = useState<Record<string, string>>({});
+  const [printing, setPrinting] = useState<string | null>(null);
   const [zoomTable, setZoomTable] = useState<AdminTable | null>(null);
   const [zoomQrUrl, setZoomQrUrl] = useState('');
   const [waiters, setWaiters] = useState<StaffUserSummary[]>([]);
@@ -148,6 +150,24 @@ export function AdminTablesTab() {
     }
   }
 
+  // The PDF is generated server-side rather than printed from this page:
+  // browsers scale at print time, and a QR printed too small stops
+  // scanning reliably.
+  async function downloadLabels(tableId?: string, tableNumber?: string) {
+    const key = tableId ?? 'all';
+    setPrinting(key);
+    try {
+      await downloadFile(
+        tableId ? `/admin/tables/${tableId}/qr-label` : '/admin/tables/qr-labels',
+        tableId ? `qr-code_table-${tableNumber}.pdf` : 'qr-codes_all-tables.pdf',
+      );
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setPrinting(null);
+    }
+  }
+
   return (
     <div>
       {loadError && <div className="error-banner">{loadError}</div>}
@@ -173,7 +193,24 @@ export function AdminTablesTab() {
       )}
 
       <div className="table-block">
-        <h3>All tables</h3>
+        <div className="top-bar" style={{ marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>All tables</h3>
+          {tables.length > 0 && (
+            <button
+              className="secondary"
+              disabled={printing === 'all'}
+              onClick={() => downloadLabels()}
+            >
+              <DownloadIcon size={14} />
+              {printing === 'all' ? 'Preparing…' : 'Print all QR codes'}
+            </button>
+          )}
+        </div>
+        {tables.length > 0 && (
+          <p className="sub" style={{ marginTop: 0 }}>
+            Six labels to an A4 sheet, with cut guides.
+          </p>
+        )}
         {tables.length === 0 && <div className="empty-state">No tables yet.</div>}
         {tables.map((table) => (
           <div key={table.id} className="card table-card">
@@ -197,6 +234,12 @@ export function AdminTablesTab() {
                       label: 'Reassign',
                       icon: <UsersIcon size={16} />,
                       onSelect: () => openReassign(table),
+                    },
+                    {
+                      label: printing === table.id ? 'Preparing…' : 'Print QR code',
+                      icon: <DownloadIcon size={16} />,
+                      disabled: printing === table.id,
+                      onSelect: () => downloadLabels(table.id, table.table_number),
                     },
                     {
                       label: 'Regenerate QR',

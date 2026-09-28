@@ -21,6 +21,7 @@ import {
   createStaffUserForRestaurant,
   updateStaffUserForRestaurant,
   regenerateQrCodeForTable,
+  renderTableQrLabels,
 } from '../modules/admin/admin.service';
 import {
   insertMenuCategory,
@@ -379,5 +380,43 @@ adminRoutes.patch(
         : {}),
     });
     res.json(restaurant);
+  }),
+);
+
+// --- Printable QR labels --------------------------------------------
+//
+// Six cut-out labels to an A4 sheet, each carrying the restaurant name,
+// the table number and a short instruction. Generated server-side rather
+// than printed from the browser so the QR's physical size is exact --
+// browsers scale pages at print time, and a QR printed too small stops
+// scanning reliably.
+//
+// Registered ahead of the '/admin/tables/:id' routes above so 'qr-labels'
+// isn't swallowed as a table id.
+
+adminRoutes.get(
+  '/admin/tables/qr-labels',
+  asyncHandler(async (req, res) => {
+    const restaurant = await findRestaurantById(req.staff!.restaurantId);
+    const { body, filename } = await renderTableQrLabels(restaurant.id, restaurant.slug, restaurant.name);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(body);
+  }),
+);
+
+adminRoutes.get(
+  '/admin/tables/:id/qr-label',
+  asyncHandler(async (req, res) => {
+    const restaurant = await findRestaurantById(req.staff!.restaurantId);
+    const { body, filename } = await renderTableQrLabels(
+      restaurant.id,
+      restaurant.slug,
+      restaurant.name,
+      req.params.id,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(body);
   }),
 );

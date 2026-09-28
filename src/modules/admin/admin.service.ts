@@ -1,12 +1,13 @@
 import QRCode from 'qrcode';
 import { hashPassword } from '../../lib/password';
 import { generateToken } from '../../lib/token';
-import { ConflictError, ValidationError } from '../../lib/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
 import {
   insertRestaurantWithAdmin,
   categoryBelongsToRestaurant,
   insertMenuItem,
   insertTable,
+  listTablesForRestaurant,
   regenerateQrToken,
   type MenuItemRow,
   type TableRow,
@@ -160,4 +161,41 @@ export async function updateStaffUserForRestaurant(
     }
     throw err;
   }
+}
+
+/**
+ * Printable QR labels for one or all of a restaurant's tables.
+ *
+ * The heavy pdfkit/qrcode work is behind a lazy import for the same reason
+ * the report exporters are: this is a rare admin action, and evaluating
+ * the PDF stack on every cold start would tax order placement, which
+ * shares this Lambda.
+ */
+export async function renderTableQrLabels(
+  restaurantId: string,
+  restaurantSlug: string,
+  restaurantName: string,
+  tableId?: string,
+): Promise<{ body: Buffer; filename: string }> {
+  const tables = await listTablesForRestaurant(restaurantId);
+  const selected = tableId ? tables.filter((t) => t.id === tableId) : tables;
+
+  if (selected.length === 0) {
+    throw new NotFoundError(tableId ? 'Table not found' : 'This restaurant has no tables yet');
+  }
+
+  const { renderQrLabelsPdf } = await import('./qrLabels.pdf');
+  const body = await renderQrLabelsPdf(
+    restaurantName,
+    selected.map((table) => ({
+      tableNumber: table.table_number,
+      orderingUrl: `${PUBLIC_ORDERING_BASE_URL}/order?slug=${restaurantSlug}&t=${table.qr_token}`,
+    })),
+  );
+
+  // Slugified so the filename is safe on every OS and obvious in a
+  // downloads folder six months later.
+  const scope = tableId ? `table-${selected[0].table_number}` : 'all-tables';
+  const safeScope = scope.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return { body, filename: `${restaurantSlug}_qr-codes_${safeScope}.pdf` };
 }
