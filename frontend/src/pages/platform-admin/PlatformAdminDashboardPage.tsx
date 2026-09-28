@@ -144,7 +144,7 @@ export function PlatformAdminDashboardPage() {
           <input
             value={form.restaurant_slug}
             onChange={(e) => setForm({ ...form, restaurant_slug: e.target.value })}
-            placeholder="e.g. amani-grill"
+            placeholder="e.g. seaside-bistro"
           />
           <label>Brand colour</label>
           <div className="brand-color-row">

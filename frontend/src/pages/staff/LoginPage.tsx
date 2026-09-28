@@ -16,7 +16,9 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const showToast = useToast();
-  const [slug, setSlug] = useState('amani-grill');
+  // Empty, not a seeded demo slug: this page is shared by every tenant's
+  // staff, so a prefilled value is wrong for all but one of them.
+  const [slug, setSlug] = useState('');
   const [contact, setContact] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,9 +48,25 @@ export function LoginPage() {
       <main className="auth">
         <div className="card">
           <label htmlFor="slug">Restaurant slug</label>
-          <input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <input
+            id="slug"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="your-restaurant"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
           <label htmlFor="contact">Phone or email</label>
-          <input id="contact" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="kitchen@amani-grill.test" />
+          <input
+            id="contact"
+            value={contact}
+            onChange={(e) => setContact(e.target.value)}
+            placeholder="you@example.com or +2547…"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
           <label htmlFor="password">Password</label>
           <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button className="primary" disabled={loading} onClick={submit}>
