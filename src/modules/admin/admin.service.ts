@@ -24,6 +24,7 @@ const PUBLIC_ORDERING_BASE_URL =
 export async function signUpRestaurant(input: {
   restaurant_name: string;
   restaurant_slug: string;
+  brand_color?: string;
   admin_name: string;
   admin_phone_or_email: string;
   admin_password: string;
@@ -33,6 +34,7 @@ export async function signUpRestaurant(input: {
     const result = await insertRestaurantWithAdmin({
       restaurantName: input.restaurant_name,
       restaurantSlug: input.restaurant_slug,
+      brandColor: input.brand_color,
       adminName: input.admin_name,
       adminPhoneOrEmail: input.admin_phone_or_email,
       adminPasswordHash,

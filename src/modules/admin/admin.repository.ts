@@ -5,6 +5,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors'
 export async function insertRestaurantWithAdmin(input: {
   restaurantName: string;
   restaurantSlug: string;
+  brandColor?: string;
   adminName: string;
   adminPhoneOrEmail: string;
   adminPasswordHash: string;
@@ -13,8 +14,8 @@ export async function insertRestaurantWithAdmin(input: {
   try {
     await client.query('BEGIN');
     const restaurant = await client.query<{ id: string }>(
-      'INSERT INTO restaurant (name, slug) VALUES ($1, $2) RETURNING id',
-      [input.restaurantName, input.restaurantSlug],
+      'INSERT INTO restaurant (name, slug, brand_color) VALUES ($1, $2, $3) RETURNING id',
+      [input.restaurantName, input.restaurantSlug, input.brandColor ?? null],
     );
     const restaurantId = restaurant.rows[0].id;
 
@@ -315,4 +316,54 @@ export async function assignWaiterToTable(
   } finally {
     client.release();
   }
+}
+
+export interface RestaurantBranding {
+  id: string;
+  name: string;
+  slug: string;
+  brand_color: string | null;
+}
+
+export async function findRestaurantBranding(restaurantId: string): Promise<RestaurantBranding> {
+  const result = await query<RestaurantBranding>(
+    'SELECT id, name, slug, brand_color FROM restaurant WHERE id = $1',
+    [restaurantId],
+  );
+  const row = result.rows[0];
+  if (!row) throw new NotFoundError('Restaurant not found');
+  return row;
+}
+
+/**
+ * Updates the restaurant's display name and/or accent colour. Both are
+ * optional so the caller can change one without clearing the other, and
+ * brand_color is explicitly nullable -- passing null is how an admin
+ * resets to the Tab default, which is distinct from omitting the field.
+ *
+ * Slug is not updatable here by design: it's baked into every QR code
+ * already printed and placed on a table.
+ */
+export async function updateRestaurantBranding(
+  restaurantId: string,
+  input: { name?: string; brandColor?: string | null },
+): Promise<RestaurantBranding> {
+  const result = await query<RestaurantBranding>(
+    `UPDATE restaurant
+     SET name = COALESCE($2, name),
+         brand_color = CASE WHEN $3::boolean THEN $4 ELSE brand_color END
+     WHERE id = $1
+     RETURNING id, name, slug, brand_color`,
+    [
+      restaurantId,
+      input.name ?? null,
+      // A separate "was this field supplied at all" flag -- without it a
+      // deliberate reset to NULL is indistinguishable from omitting it.
+      Object.prototype.hasOwnProperty.call(input, 'brandColor'),
+      input.brandColor ?? null,
+    ],
+  );
+  const row = result.rows[0];
+  if (!row) throw new NotFoundError('Restaurant not found');
+  return row;
 }

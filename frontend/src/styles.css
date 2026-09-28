@@ -712,3 +712,20 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
 .status-dot.status-ready { background: var(--green-700); }
 .status-dot.status-served { background: var(--ink-300); }
 .floor-card-footer { margin-top: 11px; }
+
+/* Brand colour picker (platform-admin onboarding + admin Branding tab) */
+
+.brand-color-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.brand-color-row input[type='text'], .brand-color-row input:not([type]) {
+  width: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase;
+}
+.brand-color-input {
+  width: 44px; height: 38px; padding: 2px;
+  border: 1px solid var(--ink-200); border-radius: var(--radius-sm);
+  background: white; cursor: pointer; flex: none;
+}
+.brand-preview { display: inline-flex; gap: 4px; margin: 12px 0 4px; }
+.brand-swatch {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.08); display: inline-block;
+}

@@ -32,7 +32,7 @@ export function PlatformAdminLoginPage() {
   return (
     <>
       <header>
-        <h1>QR Ordering</h1>
+        <h1>Tab</h1>
         <div className="sub">Platform admin</div>
       </header>
       <main className="auth">

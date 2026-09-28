@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Mirrors the restaurant_brand_color_hex CHECK constraint. Validated here
+// as well as in the database because this value ends up interpolated into
+// CSS custom properties client-side -- it should never reach the column,
+// or a stylesheet, in a shape we didn't expect.
+const brandColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'brand colour must be a 6-digit hex like #14b8a6');
+
 export const restaurantSignupSchema = z.object({
   restaurant_name: z.string().min(1).max(200),
   restaurant_slug: z
@@ -7,9 +15,17 @@ export const restaurantSignupSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'slug must be lowercase letters, digits, and hyphens'),
+  brand_color: brandColorSchema.optional(),
   admin_name: z.string().min(1).max(200),
   admin_phone_or_email: z.string().min(3).max(254),
   admin_password: z.string().min(8).max(200),
+});
+
+// Slug is deliberately absent: it's encoded into every QR code already
+// printed and stuck to a table, so it can't change without reprinting them.
+export const updateRestaurantBrandingSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  brand_color: brandColorSchema.nullable().optional(),
 });
 
 export const createMenuCategorySchema = z.object({

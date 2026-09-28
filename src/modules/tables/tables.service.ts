@@ -11,7 +11,7 @@ import { listMenuForRestaurant } from '../menu/menu.repository';
 import { broadcastEvent } from '../../realtime/broadcaster';
 
 export interface ResolveTableResult {
-  restaurant: { name: string; slug: string };
+  restaurant: { name: string; slug: string; brand_color: string | null };
   table_session_status: 'active' | 'awaiting_payment' | 'closed';
   menu: {
     categories: { id: string; name: string; sort_order: number }[];
@@ -36,7 +36,7 @@ export async function resolveTableForOrdering(
   const menu = await listMenuForRestaurant(restaurant.id);
 
   return {
-    restaurant: { name: restaurant.name, slug: restaurant.slug },
+    restaurant: { name: restaurant.name, slug: restaurant.slug, brand_color: restaurant.brand_color },
     table_session_status: session.status,
     menu,
   };

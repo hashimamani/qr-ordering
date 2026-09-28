@@ -12,6 +12,7 @@ import {
   destinationParamSchema,
   overrideStatusSchema,
   activityQuerySchema,
+  updateRestaurantBrandingSchema,
 } from '../modules/admin/admin.validation';
 import { createStaffUserSchema, updateStaffUserSchema } from '../modules/staff/staff.validation';
 import {
@@ -30,6 +31,8 @@ import {
   listTablesForRestaurant,
   assignWaiterToTable,
   removeTable,
+  findRestaurantBranding,
+  updateRestaurantBranding,
 } from '../modules/admin/admin.repository';
 import { listMenuForRestaurantAdmin } from '../modules/menu/menu.repository';
 import { listStaffUsersForRestaurant, deleteStaffUser } from '../modules/staff/staff.repository';
@@ -345,5 +348,36 @@ adminRoutes.get(
     if (!parsed.success) throw new ValidationError('Invalid activity request', parsed.error.flatten());
     const entries = await listRecentActivity(req.staff!.restaurantId, parsed.data.limit);
     res.json({ entries });
+  }),
+);
+
+// --- Branding -------------------------------------------------------
+//
+// The restaurant's own display name and accent colour. Slug is returned
+// but never writable: it's encoded in every QR code already printed and
+// stuck to a table, so changing it would orphan them.
+
+adminRoutes.get(
+  '/admin/restaurant',
+  asyncHandler(async (req, res) => {
+    const restaurant = await findRestaurantBranding(req.staff!.restaurantId);
+    res.json(restaurant);
+  }),
+);
+
+adminRoutes.patch(
+  '/admin/restaurant',
+  asyncHandler(async (req, res) => {
+    const parsed = updateRestaurantBrandingSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid branding payload', parsed.error.flatten());
+    const restaurant = await updateRestaurantBranding(req.staff!.restaurantId, {
+      name: parsed.data.name,
+      // Distinguish "omitted" from "explicitly cleared" -- null is how an
+      // admin resets to the Tab default.
+      ...(Object.prototype.hasOwnProperty.call(parsed.data, 'brand_color')
+        ? { brandColor: parsed.data.brand_color ?? null }
+        : {}),
+    });
+    res.json(restaurant);
   }),
 );

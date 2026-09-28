@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { useBrandColor } from '../hooks/useBrandColor';
 
 const NAV_LINKS: { to: string; label: string; roles: string[] }[] = [
   { to: '/admin', label: 'Admin', roles: ['admin'] },
@@ -12,6 +13,7 @@ const NAV_LINKS: { to: string; label: string; roles: string[] }[] = [
 export function StaffLayout({ title, connected, children }: { title: string; connected?: boolean; children: ReactNode }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
+  useBrandColor(session?.brandColor);
 
   if (!session) return null;
 
@@ -31,6 +33,7 @@ export function StaffLayout({ title, connected, children }: { title: string; con
           </button>
         </div>
         <div className="sub">
+          {session.restaurantName && <>{session.restaurantName} &middot; </>}
           {connected !== undefined && (
             <>
               <span className={`conn-dot ${connected ? 'live' : ''}`} />

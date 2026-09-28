@@ -6,6 +6,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { useToast } from '../../components/ToastProvider';
 import { PhoneIcon } from '../../components/icons';
 import { useRealtime } from '../../hooks/useRealtime';
+import { useBrandColor } from '../../hooks/useBrandColor';
 
 const CALL_WAITER_COOLDOWN_MS = 30_000;
 
@@ -16,6 +17,7 @@ export function TrackPage() {
   const [loadError, setLoadError] = useState('');
   const [calling, setCalling] = useState(false);
   const [calledAt, setCalledAt] = useState<number | null>(null);
+  useBrandColor(order?.brand_color);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -47,12 +49,16 @@ export function TrackPage() {
     <>
       <header>
         <div className="top-bar">
-          <h1>Your order</h1>
+          <h1>{order?.restaurant_name ?? 'Your order'}</h1>
           <div className="sub">
             <span className={`conn-dot ${connected ? 'live' : ''}`} /> {connected ? 'live' : 'connecting…'}
           </div>
         </div>
-        {order && <div className="sub">Placed {new Date(order.submitted_at).toLocaleTimeString()}</div>}
+        {order && (
+          <div className="sub">
+            Your order &middot; placed {new Date(order.submitted_at).toLocaleTimeString()}
+          </div>
+        )}
       </header>
       <main>
         {loadError && <div className="error-banner">{loadError}</div>}

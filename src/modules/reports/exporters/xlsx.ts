@@ -90,7 +90,7 @@ function addByDaySheet(workbook: ExcelJS.Workbook, bundle: ReportBundle): void {
 
 export async function toXlsx(bundle: ReportBundle): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'QR Ordering';
+  workbook.creator = 'Tab';
   workbook.created = new Date();
 
   addSummarySheet(workbook, bundle);

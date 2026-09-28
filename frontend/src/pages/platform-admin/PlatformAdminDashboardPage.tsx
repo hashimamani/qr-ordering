@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { TAB_BRAND_COLOR, derivePalette } from '../../lib/brandPalette';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { RestaurantAdmin, RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
@@ -8,6 +9,7 @@ import { useToast } from '../../components/ToastProvider';
 const EMPTY_FORM = {
   restaurant_name: '',
   restaurant_slug: '',
+  brand_color: TAB_BRAND_COLOR,
   admin_name: '',
   admin_phone_or_email: '',
   admin_password: '',
@@ -96,6 +98,7 @@ export function PlatformAdminDashboardPage() {
           ...form,
           restaurant_name: form.restaurant_name.trim(),
           restaurant_slug: form.restaurant_slug.trim(),
+          brand_color: form.brand_color,
           admin_name: form.admin_name.trim(),
           admin_phone_or_email: form.admin_phone_or_email.trim(),
         },
@@ -143,6 +146,31 @@ export function PlatformAdminDashboardPage() {
             onChange={(e) => setForm({ ...form, restaurant_slug: e.target.value })}
             placeholder="e.g. amani-grill"
           />
+          <label>Brand colour</label>
+          <div className="brand-color-row">
+            <input
+              type="color"
+              className="brand-color-input"
+              value={form.brand_color}
+              onChange={(e) => setForm({ ...form, brand_color: e.target.value })}
+            />
+            <input
+              aria-label="Brand colour hex"
+              value={form.brand_color}
+              onChange={(e) => setForm({ ...form, brand_color: e.target.value })}
+              spellCheck={false}
+              maxLength={7}
+            />
+            <span className="brand-preview">
+              {([100, 500, 700] as const).map((stop) => (
+                <span
+                  key={stop}
+                  className="brand-swatch"
+                  style={{ background: derivePalette(form.brand_color)[stop] }}
+                />
+              ))}
+            </span>
+          </div>
           <div className="grid-2">
             <div>
               <label>Admin name</label>

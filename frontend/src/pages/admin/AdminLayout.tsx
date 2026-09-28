@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { useBrandColor } from '../../hooks/useBrandColor';
 import {
   ChefHatIcon,
   GlassIcon,
@@ -34,6 +35,7 @@ export function AdminLayout() {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  useBrandColor(session?.brandColor);
 
   if (!session) return null;
 
@@ -53,8 +55,8 @@ export function AdminLayout() {
         <div className="admin-brand">
           <span className="admin-brand-mark" aria-hidden="true" />
           <span className="admin-brand-text">
-            <strong>Admin</strong>
-            <small>Console</small>
+            <strong>{session.restaurantName || 'Admin'}</strong>
+            <small>Tab admin</small>
           </span>
           <button
             className="admin-drawer-close"

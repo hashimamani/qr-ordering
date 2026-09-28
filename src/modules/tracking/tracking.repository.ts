@@ -11,17 +11,36 @@ export interface TrackedOrderItem {
 export interface TrackedOrder {
   public_token: string;
   submitted_at: string;
+  restaurant_name: string;
+  brand_color: string | null;
   items: TrackedOrderItem[];
 }
 
 /**
  * The only data this query is allowed to leak is scoped to a single order,
- * addressed by its unguessable public_token — never join out to restaurant,
- * table, or contact_value beyond what this order's own row needs.
+ * addressed by its unguessable public_token — never join out to table or
+ * contact_value beyond what this order's own row needs.
+ *
+ * Restaurant name and brand_color are a deliberate, narrow exception,
+ * added so the tracking page can carry the restaurant's own identity
+ * rather than generic Tab chrome. It discloses nothing new: whoever holds
+ * this link either scanned that restaurant's QR code in the building or
+ * was sent the link by the person who did, and the order-received email
+ * already names the restaurant in its subject line. The exception stops
+ * at these two columns — table number, contact details and anything else
+ * about the restaurant stay out.
  */
 export async function findOrderByPublicToken(publicToken: string): Promise<TrackedOrder> {
-  const orderResult = await query<{ public_token: string; submitted_at: string }>(
-    'SELECT public_token, submitted_at FROM "order" WHERE public_token = $1',
+  const orderResult = await query<{
+    public_token: string;
+    submitted_at: string;
+    restaurant_name: string;
+    brand_color: string | null;
+  }>(
+    `SELECT o.public_token, o.submitted_at, r.name AS restaurant_name, r.brand_color
+     FROM "order" o
+     JOIN restaurant r ON r.id = o.restaurant_id
+     WHERE o.public_token = $1`,
     [publicToken],
   );
   const order = orderResult.rows[0];

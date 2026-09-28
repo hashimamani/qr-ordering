@@ -10,7 +10,7 @@ initRealtime(httpServer);
 
 const port = Number(process.env.PORT ?? 3000);
 httpServer.listen(port, () => {
-  logger.info({ port }, 'qr-ordering server listening (http + ws /realtime)');
+  logger.info({ port }, 'Tab server listening (http + ws /realtime)');
 });
 
 export { app };

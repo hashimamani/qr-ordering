@@ -6,6 +6,8 @@ export interface Restaurant {
   id: string;
   name: string;
   slug: string;
+  /** Accent colour; NULL means "use the Tab default". */
+  brand_color: string | null;
 }
 
 export interface RestaurantTable {
@@ -25,7 +27,7 @@ export interface TableSession {
 
 export async function findRestaurantBySlug(slug: string): Promise<Restaurant> {
   const result = await query<Restaurant>(
-    'SELECT id, name, slug FROM restaurant WHERE slug = $1',
+    'SELECT id, name, slug, brand_color FROM restaurant WHERE slug = $1',
     [slug],
   );
   const restaurant = result.rows[0];
@@ -36,7 +38,7 @@ export async function findRestaurantBySlug(slug: string): Promise<Restaurant> {
 }
 
 export async function findRestaurantById(id: string): Promise<Restaurant> {
-  const result = await query<Restaurant>('SELECT id, name, slug FROM restaurant WHERE id = $1', [id]);
+  const result = await query<Restaurant>('SELECT id, name, slug, brand_color FROM restaurant WHERE id = $1', [id]);
   const restaurant = result.rows[0];
   if (!restaurant) {
     throw new NotFoundError('Restaurant not found');

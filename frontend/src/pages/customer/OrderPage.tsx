@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../../api/client';
 import type { ResolveTableResponse, PlaceOrderResponse } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { useToast } from '../../components/ToastProvider';
+import { useBrandColor } from '../../hooks/useBrandColor';
 
 export function OrderPage() {
   const [params] = useSearchParams();
@@ -19,6 +20,7 @@ export function OrderPage() {
   const [contact, setContact] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  useBrandColor(data?.restaurant.brand_color);
 
   useEffect(() => {
     if (!slug || !qrToken) {

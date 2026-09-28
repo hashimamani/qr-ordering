@@ -19,7 +19,7 @@ export interface MenuItem {
 }
 
 export interface ResolveTableResponse {
-  restaurant: { name: string; slug: string };
+  restaurant: { name: string; slug: string; brand_color: string | null };
   table_session_status: string;
   menu: { categories: MenuCategory[]; items: MenuItem[] };
 }
@@ -39,6 +39,8 @@ export interface TrackedOrderItem {
 export interface TrackedOrder {
   public_token: string;
   submitted_at: string;
+  restaurant_name: string;
+  brand_color: string | null;
   items: TrackedOrderItem[];
 }
 
@@ -46,6 +48,15 @@ export interface LoginResponse {
   token: string;
   role: StaffRole;
   name: string;
+  restaurant_name: string;
+  brand_color: string | null;
+}
+
+export interface RestaurantBranding {
+  id: string;
+  name: string;
+  slug: string;
+  brand_color: string | null;
 }
 
 export interface QueuedOrderItem {

@@ -28,7 +28,7 @@ export function LoginPage() {
         method: 'POST',
         body: { restaurant_slug: slug.trim(), phone_or_email: contact.trim(), password },
       });
-      login(result.token, result.name);
+      login(result.token, result.name, result.restaurant_name, result.brand_color);
       navigate(ROLE_DESTINATION[result.role]);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
@@ -40,7 +40,7 @@ export function LoginPage() {
   return (
     <>
       <header>
-        <h1>QR Ordering</h1>
+        <h1>Tab</h1>
         <div className="sub">Staff login</div>
       </header>
       <main className="auth">
