@@ -1,4 +1,4 @@
-export type NotificationChannel = 'sms' | 'email';
+export type NotificationChannel = 'sms' | 'email' | 'whatsapp';
 export type NotificationTrigger = 'order_received' | 'order_ready' | 'receipt';
 
 export interface NotificationJob {
@@ -11,5 +11,12 @@ export interface NotificationJob {
     trackingUrl: string;
     /** Only set for the 'receipt' trigger. */
     receiptUrl?: string;
+    /**
+     * Only set for the 'receipt' trigger on WhatsApp: a single-use,
+     * short-lived URL the messaging provider can fetch the PDF from to
+     * attach it. Distinct from receiptUrl, which is the customer-facing
+     * page behind the last-4 challenge.
+     */
+    receiptMediaUrl?: string;
   };
 }

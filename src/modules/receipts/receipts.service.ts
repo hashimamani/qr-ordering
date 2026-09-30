@@ -7,6 +7,8 @@ import {
   hashReceiptToken,
   receiptExpiryFrom,
   receiptUrlFor,
+  receiptMediaUrlFor,
+  mediaFetchExpiryFrom,
   MAX_FAILED_ATTEMPTS,
 } from '../../lib/receipts';
 import {
@@ -15,6 +17,9 @@ import {
   insertReceipt,
   markReceiptViewed,
   recordFailedAttempt,
+  setMediaFetchToken,
+  consumeMediaFetchToken,
+  reissueReceipt,
   type ReceiptDetail,
 } from './receipts.repository';
 
@@ -54,8 +59,23 @@ export async function issueReceiptForOrder(orderId: string): Promise<IssuedRecei
   return { token, url: receiptUrlFor(token) };
 }
 
+/**
+ * Replaces an order's receipt link with a fresh one and a fresh expiry.
+ *
+ * This exists because there is no automatic channel fallback: if the
+ * WhatsApp send fails, or the customer lets the link expire, a staff-
+ * initiated reissue is the only recovery path. The token is regenerated
+ * rather than reused because only its hash was ever stored.
+ */
+export async function reissueReceiptForOrder(orderId: string): Promise<IssuedReceipt | undefined> {
+  const token = generateReceiptToken();
+  const updated = await reissueReceipt(orderId, hashReceiptToken(token), receiptExpiryFrom(new Date()));
+  if (!updated) return undefined;
+  return { token, url: receiptUrlFor(token) };
+}
+
 export interface ChallengePrompt {
-  channel: 'sms' | 'email';
+  channel: 'sms' | 'email' | 'whatsapp';
   /** A masked hint, never the contact itself -- enough to recognise, not enough to answer. */
   hint: string;
 }
@@ -71,12 +91,12 @@ export async function describeReceiptChallenge(token: string): Promise<Challenge
     throw new NotFoundError(GENERIC_REJECTION);
   }
 
-  if (receipt.contact_channel === 'sms') {
+  if (receipt.contact_channel === 'sms' || receipt.contact_channel === 'whatsapp') {
     // Shows the leading digits and hides the rest. Masking the *end*
     // rather than the start is the point: the last 4 is the answer, so a
     // hint that revealed it would defeat the challenge. The prefix is
     // enough to recognise which of your numbers this was sent to.
-    return { channel: 'sms', hint: maskPhone(receipt.contact_value) };
+    return { channel: receipt.contact_channel, hint: maskPhone(receipt.contact_value) };
   }
   return { channel: 'email', hint: maskEmail(receipt.contact_value) };
 }
@@ -155,4 +175,41 @@ function maskEmail(email: string): string {
   if (!domain) return '•••';
   const shown = local.slice(0, 1);
   return `${shown}${'•'.repeat(Math.max(local.length - 1, 1))}@${domain}`;
+}
+
+/**
+ * Mints a single-use URL the messaging provider can fetch the receipt PDF
+ * from, so it can be attached to a WhatsApp message.
+ *
+ * Needed because the customer-facing PDF endpoint sits behind the last-4
+ * challenge, which a provider's servers can't answer. Rather than
+ * weakening that endpoint, this issues a separate credential scoped to a
+ * single fetch and expiring in minutes -- the URL will sit in the
+ * provider's request logs, so it must go stale almost immediately.
+ */
+export async function mintReceiptMediaUrl(token: string): Promise<string | undefined> {
+  const receipt = await findReceiptByTokenHash(hashReceiptToken(token));
+  if (!receipt) return undefined;
+
+  const mediaToken = generateReceiptToken();
+  await setMediaFetchToken(
+    receipt.receipt_id,
+    hashReceiptToken(mediaToken),
+    mediaFetchExpiryFrom(new Date()),
+  );
+  return receiptMediaUrlFor(token, mediaToken);
+}
+
+/**
+ * Redeems a media token and returns the receipt. Redemption is atomic and
+ * one-shot (see consumeMediaFetchToken), so a URL replayed from the
+ * provider's logs finds nothing.
+ */
+export async function loadReceiptForMediaFetch(token: string, mediaToken: string): Promise<ReceiptDetail> {
+  const consumed = await consumeMediaFetchToken(hashReceiptToken(token), hashReceiptToken(mediaToken));
+  if (!consumed) throw new NotFoundError(GENERIC_REJECTION);
+
+  const detail = await findReceiptDetail(consumed.order_id);
+  if (!detail) throw new NotFoundError(GENERIC_REJECTION);
+  return detail;
 }

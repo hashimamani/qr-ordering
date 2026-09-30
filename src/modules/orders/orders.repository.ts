@@ -19,7 +19,7 @@ export interface CreateOrderInput {
   publicToken: string;
   tableSessionId: string;
   restaurantId: string;
-  contactChannel: 'sms' | 'email';
+  contactChannel: 'sms' | 'email' | 'whatsapp';
   contactValue: string;
   items: CreateOrderItemInput[];
 }
@@ -48,8 +48,8 @@ export async function insertOrder(
     await client.query('BEGIN');
 
     const orderResult = await client.query<CreatedOrder>(
-      `INSERT INTO "order" (public_token, table_session_id, restaurant_id, contact_channel, contact_value)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO "order" (public_token, table_session_id, restaurant_id, contact_channel, contact_value, contact_consent_at)
+       VALUES ($1, $2, $3, $4, $5, now())
        RETURNING id, public_token, submitted_at`,
       [
         input.publicToken,
@@ -90,7 +90,7 @@ export async function insertOrder(
 }
 
 export interface OrderNotificationContext {
-  contact_channel: 'sms' | 'email';
+  contact_channel: 'sms' | 'email' | 'whatsapp';
   contact_value: string;
   restaurant_name: string;
   public_token: string;
@@ -145,4 +145,21 @@ export async function isOrderFullyComplete(publicToken: string): Promise<boolean
     [publicToken],
   );
   return result.rows[0]?.complete ?? false;
+}
+
+/**
+ * Resolves a public token to an order id, scoped to the restaurant so one
+ * tenant's staff can never act on another's order.
+ */
+export async function findOrderIdByPublicToken(
+  restaurantId: string,
+  publicToken: string,
+): Promise<{ id: string }> {
+  const result = await query<{ id: string }>(
+    'SELECT id FROM "order" WHERE restaurant_id = $1 AND public_token = $2',
+    [restaurantId, publicToken],
+  );
+  const row = result.rows[0];
+  if (!row) throw new NotFoundError('Order not found');
+  return row;
 }

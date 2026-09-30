@@ -15,15 +15,21 @@ import {
   markOrderAsPaid,
   isOrderFullyComplete,
   findOrderNotificationContext,
+  findOrderIdByPublicToken,
   type CreateOrderItemInput,
 } from './orders.repository';
 import { generateToken } from '../../lib/token';
 import { trackingUrlFor } from '../../lib/urls';
-import { ForbiddenError, ValidationError } from '../../lib/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
 import { getReportingQueue } from '../reports/events/reportingEvents.queue';
-import { issueReceiptForOrder } from '../receipts/receipts.service';
+import {
+  issueReceiptForOrder,
+  reissueReceiptForOrder,
+  mintReceiptMediaUrl,
+  type IssuedReceipt,
+} from '../receipts/receipts.service';
 import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../../realtime/webPush';
@@ -212,33 +218,66 @@ export async function markOrderPaid(restaurantId: string, publicToken: string): 
  * path, and a paid-but-un-receipted order is recoverable in a way that a
  * payment which 500s is not. Nothing in here may throw outward.
  */
+/**
+ * Staff-initiated resend. Necessary because there is no automatic channel
+ * fallback: a failed WhatsApp send, or an expired link, otherwise leaves
+ * the customer with no receipt and no recourse.
+ *
+ * Sends to the contact already stored on the order -- never to an address
+ * supplied by whoever clicked -- preserving the rule recorded on
+ * order.contact_value: the receipt goes back to the contact who placed the
+ * order, not to whoever asks for it.
+ */
+export async function resendReceipt(restaurantId: string, publicToken: string): Promise<void> {
+  const { id: orderId } = await findOrderIdByPublicToken(restaurantId, publicToken);
+  const issued = await reissueReceiptForOrder(orderId);
+  if (!issued) throw new NotFoundError('This order has no receipt to resend');
+  await sendReceiptMessage(orderId, issued);
+}
+
 async function issueAndSendReceipt(orderId: string): Promise<void> {
   try {
     const issued = await issueReceiptForOrder(orderId);
     // undefined means a link already existed; only the original token
     // works, so sending again would deliver a dead link.
     if (!issued) return;
-
-    const context = await findOrderNotificationContext(orderId);
-    if (!context) {
-      logger.error({ orderId }, 'receipt issued but order has no contact context; not sending');
-      return;
-    }
-
-    await getNotificationQueue().enqueue({
-      orderId,
-      channel: context.contact_channel,
-      contactValue: context.contact_value,
-      trigger: 'receipt',
-      templateData: {
-        restaurantName: context.restaurant_name,
-        trackingUrl: trackingUrlFor(context.public_token),
-        receiptUrl: issued.url,
-      },
-    });
+    await sendReceiptMessage(orderId, issued);
   } catch (err) {
     logger.error({ err, orderId }, 'failed to issue or send receipt');
   }
+}
+
+/**
+ * Shared by the on-payment send and the staff resend, so both deliver an
+ * identical message through an identical path -- a resend that differed
+ * from the original would be its own class of bug.
+ */
+async function sendReceiptMessage(orderId: string, issued: IssuedReceipt): Promise<void> {
+  const context = await findOrderNotificationContext(orderId);
+  if (!context) {
+    logger.error({ orderId }, 'receipt issued but order has no contact context; not sending');
+    return;
+  }
+
+  // WhatsApp attaches the PDF via a DOCUMENT header, which needs a URL the
+  // provider can fetch -- the customer-facing one is behind the last-4
+  // challenge. Only minted for WhatsApp; SMS and email carry the link
+  // alone, as before.
+  const receiptMediaUrl =
+    context.contact_channel === 'whatsapp' ? await mintReceiptMediaUrl(issued.token) : undefined;
+
+  await getNotificationQueue().enqueue({
+    orderId,
+    channel: context.contact_channel,
+    contactValue: context.contact_value,
+    trigger: 'receipt',
+    templateData: {
+      restaurantName: context.restaurant_name,
+      trackingUrl: trackingUrlFor(context.public_token),
+      receiptUrl: issued.url,
+      receiptMediaUrl,
+    },
+  });
 }
 
 /**

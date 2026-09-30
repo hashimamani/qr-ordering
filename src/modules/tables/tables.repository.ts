@@ -305,7 +305,7 @@ export interface WaiterOrderItem {
 
 export interface WaiterOrder {
   public_token: string;
-  contact_channel: 'sms' | 'email';
+  contact_channel: 'sms' | 'email' | 'whatsapp';
   submitted_at: string;
   payment_status: 'unpaid' | 'paid';
   items: WaiterOrderItem[];

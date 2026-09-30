@@ -5,7 +5,7 @@ export interface ReceiptLookup {
   order_id: string;
   expires_at: string;
   failed_attempts: number;
-  contact_channel: 'sms' | 'email';
+  contact_channel: 'sms' | 'email' | 'whatsapp';
   contact_value: string;
 }
 
@@ -181,4 +181,62 @@ export async function findReceiptDetail(orderId: string): Promise<ReceiptDetail 
     total: total.toFixed(2),
     prices_reconstructed,
   };
+}
+
+export async function setMediaFetchToken(
+  receiptId: string,
+  tokenHash: string,
+  expiresAt: Date,
+): Promise<void> {
+  await query(
+    'UPDATE order_receipt SET media_fetch_token_hash = $2, media_fetch_expires_at = $3 WHERE id = $1',
+    [receiptId, tokenHash, expiresAt],
+  );
+}
+
+/**
+ * Atomically redeems a media fetch token: the UPDATE both validates and
+ * clears it in one statement, so two concurrent fetches can't both
+ * succeed. Doing this as a SELECT-then-UPDATE would leave a window where
+ * a URL leaked from the provider's logs could be replayed.
+ */
+export async function consumeMediaFetchToken(
+  receiptTokenHash: string,
+  mediaTokenHash: string,
+): Promise<{ order_id: string } | undefined> {
+  const result = await query<{ order_id: string }>(
+    `UPDATE order_receipt
+     SET media_fetch_token_hash = NULL, media_fetch_expires_at = NULL
+     WHERE token_hash = $1
+       AND media_fetch_token_hash = $2
+       AND media_fetch_expires_at > now()
+     RETURNING order_id`,
+    [receiptTokenHash, mediaTokenHash],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Replaces a receipt's token and extends its expiry. Used only by the
+ * resend path: the original token can't be recovered (only its hash is
+ * stored) and may have expired, so a resend necessarily supersedes it.
+ *
+ * Resetting failed_attempts is deliberate — a link burnt by someone
+ * guessing at it should not stay burnt for the legitimate customer once
+ * staff deliberately reissue it.
+ */
+export async function reissueReceipt(
+  orderId: string,
+  tokenHash: string,
+  expiresAt: Date,
+): Promise<{ receipt_id: string } | undefined> {
+  const result = await query<{ receipt_id: string }>(
+    `UPDATE order_receipt
+     SET token_hash = $2, expires_at = $3, issued_at = issued_at,
+         failed_attempts = 0, media_fetch_token_hash = NULL, media_fetch_expires_at = NULL
+     WHERE order_id = $1
+     RETURNING id AS receipt_id`,
+    [orderId, tokenHash, expiresAt],
+  );
+  return result.rows[0];
 }

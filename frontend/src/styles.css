@@ -784,3 +784,9 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
   background: var(--amber-50); border-radius: var(--radius-sm);
   padding: 10px 12px; margin: 12px 0;
 }
+
+/* Consent notice under the contact field on the order form */
+.consent-note {
+  font-size: 12px; line-height: 1.5; color: var(--ink-500);
+  margin: -4px 0 14px;
+}

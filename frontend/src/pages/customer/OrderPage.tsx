@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
-import type { ResolveTableResponse, PlaceOrderResponse } from '../../api/types';
+import type { ResolveTableResponse, PlaceOrderResponse, ContactChannel } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { useToast } from '../../components/ToastProvider';
 import { useBrandColor } from '../../hooks/useBrandColor';
@@ -16,11 +16,18 @@ export function OrderPage() {
   const [data, setData] = useState<ResolveTableResponse | null>(null);
   const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Map<string, number>>(new Map());
-  const [channel, setChannel] = useState<'sms' | 'email'>('sms');
+  // WhatsApp is the default: promotional-SMS blocks mean a meaningful
+  // share of customers never receive an SMS at all, whereas order updates
+  // and receipts go out on WhatsApp as utility messages.
+  const [channel, setChannel] = useState<ContactChannel>('whatsapp');
   const [contact, setContact] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   useBrandColor(data?.restaurant.brand_color);
+
+  // WhatsApp and SMS are both addressed by the same E.164 number, so the
+  // field is shared and switching between them needs no re-entry.
+  const isPhoneChannel = channel === 'whatsapp' || channel === 'sms';
 
   useEffect(() => {
     if (!slug || !qrToken) {
@@ -152,21 +159,36 @@ export function OrderPage() {
           </div>
 
           <label htmlFor="channel" style={{ marginTop: 16 }}>
-            Get your tracking link by
+            Get your updates and receipt by
           </label>
-          <select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as 'sms' | 'email')}>
+          <select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as ContactChannel)}>
+            <option value="whatsapp">WhatsApp</option>
             <option value="sms">SMS</option>
             <option value="email">Email</option>
           </select>
           <label htmlFor="contact">
-            {channel === 'sms' ? 'Phone number' : 'Email address'}
+            {isPhoneChannel ? 'Phone number' : 'Email address'}
           </label>
           <input
             id="contact"
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder={channel === 'sms' ? '0712345678 or +254712345678' : 'you@example.com'}
+            inputMode={isPhoneChannel ? 'tel' : 'email'}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={isPhoneChannel ? '0712345678 or +254712345678' : 'you@example.com'}
           />
+          {/* Meta requires opt-in even for utility templates, so the notice
+              has to be visible at the point the number is given. Submitting
+              is what records contact_consent_at server-side. */}
+          <p className="consent-note">
+            {channel === 'whatsapp'
+              ? "We'll message your order updates and receipt on WhatsApp. Standard rates may apply."
+              : channel === 'sms'
+                ? "We'll text your order updates and receipt to this number."
+                : "We'll email your order updates and receipt to this address."}
+          </p>
           <button className="primary" disabled={submitting} onClick={submitOrder}>
             {submitting ? 'Placing order…' : `Place order · KSh ${totalPrice.toLocaleString()}`}
           </button>

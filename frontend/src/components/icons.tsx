@@ -294,3 +294,12 @@ export function EyeOffIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function SendIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 3 10.5 13.5" />
+      <path d="M21 3l-6.5 18-4-8-8-4L21 3Z" />
+    </svg>
+  );
+}

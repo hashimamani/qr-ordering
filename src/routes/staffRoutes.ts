@@ -10,7 +10,7 @@ import { getWaiterView, closeSession, acknowledgeCall } from '../modules/tables/
 import { listIdleTablesForRestaurant } from '../modules/tables/tables.repository';
 import { upsertPushSubscription } from '../modules/push/push.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
-import { placeStaffOrder, markOrderPaid } from '../modules/orders/orders.service';
+import { placeStaffOrder, markOrderPaid, resendReceipt } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
 
 export const staffRoutes = Router();
@@ -175,6 +175,20 @@ staffRoutes.patch(
   requireRole('admin', 'waiter'),
   asyncHandler(async (req, res) => {
     await markOrderPaid(req.staff!.restaurantId, req.params.publicToken);
+    res.status(204).send();
+  }),
+);
+
+// Resends to the contact stored on the order, never to one supplied by
+// the caller -- the receipt goes back to whoever placed the order. Needed
+// because there's no automatic channel fallback, so a failed send or an
+// expired link would otherwise be unrecoverable.
+staffRoutes.post(
+  '/staff/orders/:publicToken/resend-receipt',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    await resendReceipt(req.staff!.restaurantId, req.params.publicToken);
     res.status(204).send();
   }),
 );

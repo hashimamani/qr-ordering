@@ -6,7 +6,7 @@ import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
-import { BanknoteIcon, BellIcon, CheckIcon, ClipboardListIcon, XIcon } from '../../components/icons';
+import { BanknoteIcon, BellIcon, CheckIcon, ClipboardListIcon, SendIcon, XIcon } from '../../components/icons';
 import { useAuth } from '../../auth/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { usePushSubscription } from '../../hooks/usePushSubscription';
@@ -21,6 +21,7 @@ export function WaiterPage() {
   const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
   const [servingId, setServingId] = useState<string | null>(null);
   const [payingToken, setPayingToken] = useState<string | null>(null);
+  const [resendingToken, setResendingToken] = useState<string | null>(null);
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
   const [startTableId, setStartTableId] = useState('');
@@ -86,6 +87,21 @@ export function WaiterPage() {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setPayingToken(null);
+    }
+  }
+
+  // Goes to the contact stored on the order, never one entered here --
+  // the only recovery path if a receipt send failed or its link expired,
+  // since there's deliberately no automatic channel fallback.
+  async function resendReceipt(publicToken: string) {
+    setResendingToken(publicToken);
+    try {
+      await apiFetch(`/staff/orders/${publicToken}/resend-receipt`, { method: 'POST', auth: true });
+      showToast('Receipt resent to the customer.', 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setResendingToken(null);
     }
   }
 
@@ -233,8 +249,8 @@ export function WaiterPage() {
                   </span>
                 </div>
               ))}
-              {order.payment_status === 'unpaid' && (
-                <div className="order-block-footer">
+              <div className="order-block-footer">
+                {order.payment_status === 'unpaid' ? (
                   <button
                     className="ghost"
                     disabled={payingToken === order.public_token}
@@ -243,8 +259,17 @@ export function WaiterPage() {
                     <BanknoteIcon size={14} />
                     {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
                   </button>
-                </div>
-              )}
+                ) : (
+                  <button
+                    className="ghost"
+                    disabled={resendingToken === order.public_token}
+                    onClick={() => resendReceipt(order.public_token)}
+                  >
+                    <SendIcon size={14} />
+                    {resendingToken === order.public_token ? 'Resending…' : 'Resend receipt'}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -15,6 +15,7 @@ import {
   describeReceiptChallenge,
   verifyAndLoadReceipt,
   loadReceiptForDownload,
+  loadReceiptForMediaFetch,
 } from '../modules/receipts/receipts.service';
 import { verifyReceiptChallengeSchema } from '../modules/receipts/receipts.validation';
 import { broadcastToTableWaiter } from '../realtime/waiterBroadcast';
@@ -116,8 +117,16 @@ customerRoutes.get(
   '/receipt/:token/pdf',
   fixedWindowRateLimit({ windowMs: 60_000, max: 10 }),
   asyncHandler(async (req, res) => {
+    // Two ways in, and only two: a customer's bearer grant (issued after
+    // they answer the last-4 challenge), or a single-use media token the
+    // send path minted for the messaging provider, which has no way to
+    // answer a challenge. The media token is redeemed atomically and
+    // cleared, so the URL in the provider's logs is inert afterwards.
+    const mediaToken = typeof req.query.m === 'string' ? req.query.m : undefined;
     const grant = (req.headers.authorization ?? '').replace(/^Bearer /, '');
-    const receipt = await loadReceiptForDownload(req.params.token, grant);
+    const receipt = mediaToken
+      ? await loadReceiptForMediaFetch(req.params.token, mediaToken)
+      : await loadReceiptForDownload(req.params.token, grant);
     // Lazy import for the same reason the report exporters use one: keep
     // pdfkit off the cold-start path of a Lambda that also places orders.
     const { renderReceiptPdf } = await import('../modules/receipts/receipts.pdf');

@@ -12,7 +12,7 @@ export const createOrderSchema = z.object({
     )
     .min(1, 'Order must contain at least one item')
     .max(50, 'Too many line items in a single order'),
-  contact_channel: z.enum(['sms', 'email']),
+  contact_channel: z.enum(['sms', 'email', 'whatsapp']),
   contact_value: z.string().min(3).max(254),
 });
 
@@ -31,8 +31,15 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * with its normal error rather than silently mangling it. Email contact
  * values are untouched.
  */
+export function isPhoneChannel(channel: CreateOrderInput['contact_channel']): boolean {
+  return channel === 'sms' || channel === 'whatsapp';
+}
+
 export function normalizeContactValue(input: CreateOrderInput): CreateOrderInput {
-  if (input.contact_channel !== 'sms') return input;
+  // WhatsApp is addressed by the same E.164 number as SMS, so it gets the
+  // same normalisation -- which is also what lets a customer switch
+  // between the two without retyping anything.
+  if (!isPhoneChannel(input.contact_channel)) return input;
   const trimmed = input.contact_value.trim().replace(/[\s-]/g, '');
   let normalized = trimmed;
   if (/^0\d{9}$/.test(trimmed)) {
@@ -44,8 +51,10 @@ export function normalizeContactValue(input: CreateOrderInput): CreateOrderInput
 }
 
 export function assertContactValueMatchesChannel(input: CreateOrderInput): void {
-  if (input.contact_channel === 'sms' && !E164_PHONE.test(input.contact_value)) {
-    throw new ValidationError('contact_value must be an E.164 phone number (e.g. +2547XXXXXXXX) for sms channel');
+  if (isPhoneChannel(input.contact_channel) && !E164_PHONE.test(input.contact_value)) {
+    throw new ValidationError(
+      `contact_value must be an E.164 phone number (e.g. +2547XXXXXXXX) for ${input.contact_channel} channel`,
+    );
   }
   if (input.contact_channel === 'email' && !EMAIL.test(input.contact_value)) {
     throw new ValidationError('contact_value must be a valid email address for email channel');

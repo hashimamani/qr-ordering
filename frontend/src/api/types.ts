@@ -1,6 +1,8 @@
 export type StaffRole = 'admin' | 'waiter' | 'kitchen' | 'bar';
 export type OrderItemStatus = 'received' | 'preparing' | 'ready' | 'served';
 export type Destination = 'kitchen' | 'bar';
+/** WhatsApp is the default; SMS and email remain available. */
+export type ContactChannel = 'sms' | 'email' | 'whatsapp';
 
 export interface MenuCategory {
   id: string;

@@ -2,14 +2,26 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import AfricasTalking from 'africastalking';
 import { logger } from '../../lib/logger';
 import type { NotificationChannel } from './notifications.types';
+import type { WhatsAppTemplateMessage } from './whatsappTemplates';
 
 export interface SendResult {
   success: boolean;
   providerResponse: string;
+  /** Provider-side id, for tracing a "I never got it" back to the carrier. */
+  providerMessageId?: string;
 }
 
 export interface NotificationProvider {
   send(to: string, message: { subject?: string; body: string }): Promise<SendResult>;
+  /**
+   * WhatsApp only. Business-initiated WhatsApp messages can't carry
+   * free-form text -- outside the 24-hour window opened by an inbound
+   * customer message (which never happens in our flow) only templates
+   * pre-approved by Meta may be sent. So the WhatsApp provider takes a
+   * template reference rather than a rendered string, and the SMS/email
+   * providers simply don't implement this.
+   */
+  sendTemplate?(to: string, template: WhatsAppTemplateMessage): Promise<SendResult>;
 }
 
 /**
@@ -23,6 +35,14 @@ class ConsoleProvider implements NotificationProvider {
 
   async send(to: string, message: { subject?: string; body: string }): Promise<SendResult> {
     logger.info({ channel: this.channel, to, message }, '[dry-run] notification not actually sent');
+    return { success: true, providerResponse: 'dry_run' };
+  }
+
+  // Logs the resolved template id and parameter values, which is what
+  // makes the WhatsApp path verifiable end-to-end before any Meta
+  // approval exists -- a transposed parameter is visible right here.
+  async sendTemplate(to: string, template: WhatsAppTemplateMessage): Promise<SendResult> {
+    logger.info({ channel: this.channel, to, template }, '[dry-run] whatsapp template not actually sent');
     return { success: true, providerResponse: 'dry_run' };
   }
 }
@@ -93,6 +113,68 @@ class SesEmailProvider implements NotificationProvider {
   }
 }
 
+/**
+ * WhatsApp via Africa's Talking' chat API. Deliberately the same vendor as
+ * the SMS provider above -- the credentials, account and billing already
+ * exist, which is most of why this was the cheapest route to a channel
+ * that isn't subject to promotional-SMS filtering.
+ *
+ * Only ever sends templates. See the sendTemplate docs on
+ * NotificationProvider for why free-form text isn't an option here.
+ */
+class AfricasTalkingWhatsAppProvider implements NotificationProvider {
+  private readonly client: ReturnType<typeof AfricasTalking>;
+
+  constructor(
+    apiKey: string,
+    username: string,
+    private readonly waNumber: string,
+  ) {
+    this.client = AfricasTalking({ apiKey, username });
+  }
+
+  // Present only to satisfy the interface. Reaching it would mean a
+  // caller routed a plain-text notification down the WhatsApp path, which
+  // Meta would reject anyway -- better to fail here with a clear reason
+  // than to be told "message undeliverable" by the provider.
+  async send(): Promise<SendResult> {
+    return {
+      success: false,
+      providerResponse: 'WhatsApp requires a pre-approved template; plain text is not sendable',
+    };
+  }
+
+  async sendTemplate(to: string, template: WhatsAppTemplateMessage): Promise<SendResult> {
+    try {
+      const result = await this.client.WHATSAPP.sendMessage({
+        waNumber: this.waNumber,
+        phoneNumber: to,
+        body: {
+          templateId: template.templateId,
+          headerValue: template.headerValue,
+          bodyValues: template.bodyValues,
+        },
+      });
+      // AT's chat API shape isn't as well documented as their SMS one, so
+      // this reads defensively rather than assuming a field: the id is for
+      // support tracing, and failing to find it must not fail the send.
+      const messageId =
+        (result as { messageId?: string; id?: string })?.messageId ??
+        (result as { id?: string })?.id;
+      return {
+        success: true,
+        providerResponse: JSON.stringify(result),
+        providerMessageId: messageId,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        providerResponse: err instanceof Error ? err.message : JSON.stringify(err),
+      };
+    }
+  }
+}
+
 export function getProviderForChannel(channel: NotificationChannel): NotificationProvider {
   const dryRun = process.env.NOTIFICATIONS_DRY_RUN !== 'false';
 
@@ -103,6 +185,19 @@ export function getProviderForChannel(channel: NotificationChannel): Notificatio
       return new ConsoleProvider('sms');
     }
     return new AfricasTalkingSmsProvider(apiKey, username, process.env.AFRICASTALKING_SENDER_ID);
+  }
+
+  if (channel === 'whatsapp') {
+    const apiKey = process.env.AFRICASTALKING_API_KEY;
+    const username = process.env.AFRICASTALKING_USERNAME;
+    const waNumber = process.env.WHATSAPP_SENDER_NUMBER;
+    // Same fallback contract as the other channels: without credentials
+    // this logs instead of sending, which is what lets the whole WhatsApp
+    // path ship and be exercised before Meta has approved anything.
+    if (dryRun || !apiKey || !username || !waNumber) {
+      return new ConsoleProvider('whatsapp');
+    }
+    return new AfricasTalkingWhatsAppProvider(apiKey, username, waNumber);
   }
 
   const fromAddress = process.env.SES_FROM_ADDRESS;

@@ -18,8 +18,12 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   for (const record of event.Records) {
     try {
       const job = JSON.parse(record.body) as NotificationJob;
-      const { success } = await sendNotification(job);
-      if (!success) {
+      const { success, permanent } = await sendNotification(job);
+      // A permanent failure is acknowledged rather than redriven: SQS
+      // would retry it five times and then dead-letter a message that
+      // cannot ever succeed. The failure is already recorded in
+      // notification_log and logged at error level by sendNotification.
+      if (!success && !permanent) {
         failures.push({ itemIdentifier: record.messageId });
       }
     } catch {

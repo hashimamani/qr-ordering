@@ -24,8 +24,10 @@ class InMemoryNotificationQueue implements NotificationQueue {
   }
 
   private async processWithRetry(job: NotificationJob, attempt: number): Promise<void> {
-    const { success } = await sendNotification(job);
-    if (success || attempt >= MAX_ATTEMPTS - 1) {
+    const { success, permanent } = await sendNotification(job);
+    // permanent failures are not retried -- see SendOutcome. Retrying a
+    // missing template id just writes the same failure row again.
+    if (success || permanent || attempt >= MAX_ATTEMPTS - 1) {
       if (!success) {
         logger.error({ job, attempt: attempt + 1 }, 'notification failed after max attempts');
       }

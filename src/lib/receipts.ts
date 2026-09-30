@@ -34,7 +34,7 @@ export function hashReceiptToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-export type ContactChannel = 'sms' | 'email';
+export type ContactChannel = 'sms' | 'email' | 'whatsapp';
 
 /**
  * How many wrong answers burn the link. IP rate limiting alone doesn't
@@ -62,7 +62,9 @@ export function challengeMatches(
   const given = answer.trim();
   if (!given) return false;
 
-  if (channel === 'sms') {
+  // WhatsApp and SMS both identify the customer by phone number, so they
+  // share the last-4 challenge. Only email differs.
+  if (channel === 'sms' || channel === 'whatsapp') {
     const digits = contactValue.replace(/\D/g, '');
     const expected = digits.slice(-4);
     // Tolerate someone typing the whole number, but never a prefix match.
@@ -84,4 +86,26 @@ function timingSafeEqual(a: string, b: string): boolean {
   const bufB = Buffer.from(b, 'utf8');
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * How long the messaging provider has to fetch the receipt PDF for a
+ * WhatsApp attachment. Short on purpose: the URL carrying this token will
+ * sit in the provider's request logs, so it should be inert almost
+ * immediately. It is also single-use — see consumeMediaFetchToken.
+ */
+export const MEDIA_FETCH_TTL_MINUTES = 15;
+
+export function mediaFetchExpiryFrom(issuedAt: Date): Date {
+  return new Date(issuedAt.getTime() + MEDIA_FETCH_TTL_MINUTES * 60 * 1000);
+}
+
+/**
+ * The URL handed to the messaging provider. Distinct from receiptUrl,
+ * which is the customer-facing page behind the last-4 challenge — the
+ * provider's servers obviously can't answer that challenge, and weakening
+ * the customer endpoint so they could would undo its whole point.
+ */
+export function receiptMediaUrlFor(token: string, mediaToken: string): string {
+  return `${PUBLIC_BASE_URL}/receipt/${token}/pdf?m=${mediaToken}`;
 }

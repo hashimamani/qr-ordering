@@ -5,7 +5,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { useRealtime } from '../../../hooks/useRealtime';
 import { useToast } from '../../../components/ToastProvider';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
-import { BanknoteIcon, BellIcon } from '../../../components/icons';
+import { BanknoteIcon, BellIcon, SendIcon } from '../../../components/icons';
 
 /**
  * Live floor state across every table, not one waiter's own.
@@ -21,6 +21,7 @@ export function FloorSection() {
   const [sessions, setSessions] = useState<WaiterTableSession[]>([]);
   const [loadError, setLoadError] = useState('');
   const [payingToken, setPayingToken] = useState<string | null>(null);
+  const [resendingToken, setResendingToken] = useState<string | null>(null);
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState<WaiterTableSession | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -54,6 +55,19 @@ export function FloorSection() {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setPayingToken(null);
+    }
+  }
+
+  // Always to the contact on the order, never one supplied here.
+  async function resendReceipt(publicToken: string) {
+    setResendingToken(publicToken);
+    try {
+      await apiFetch(`/staff/orders/${publicToken}/resend-receipt`, { method: 'POST', auth: true });
+      showToast('Receipt resent to the customer.', 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setResendingToken(null);
     }
   }
 
@@ -161,7 +175,7 @@ export function FloorSection() {
                     </span>
                   ))}
                 </div>
-                {order.payment_status === 'unpaid' && (
+                {order.payment_status === 'unpaid' ? (
                   <button
                     className="ghost"
                     disabled={payingToken === order.public_token}
@@ -169,6 +183,15 @@ export function FloorSection() {
                   >
                     <BanknoteIcon size={14} />
                     {payingToken === order.public_token ? 'Marking paid…' : 'Mark paid'}
+                  </button>
+                ) : (
+                  <button
+                    className="ghost"
+                    disabled={resendingToken === order.public_token}
+                    onClick={() => resendReceipt(order.public_token)}
+                  >
+                    <SendIcon size={14} />
+                    {resendingToken === order.public_token ? 'Resending…' : 'Resend receipt'}
                   </button>
                 )}
               </div>
