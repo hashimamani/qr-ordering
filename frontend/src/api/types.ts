@@ -22,6 +22,8 @@ export interface MenuItem {
 
 export interface ResolveTableResponse {
   restaurant: { name: string; slug: string; brand_color: string | null };
+  /** Channels this deployment can actually deliver on, in preference order. */
+  available_channels: ContactChannel[];
   table_session_status: string;
   menu: { categories: MenuCategory[]; items: MenuItem[] };
 }

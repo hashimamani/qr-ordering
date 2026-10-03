@@ -16,10 +16,12 @@ export function OrderPage() {
   const [data, setData] = useState<ResolveTableResponse | null>(null);
   const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Map<string, number>>(new Map());
-  // WhatsApp is the default: promotional-SMS blocks mean a meaningful
-  // share of customers never receive an SMS at all, whereas order updates
-  // and receipts go out on WhatsApp as utility messages.
-  const [channel, setChannel] = useState<ContactChannel>('whatsapp');
+  // Deliberately not defaulted to a hardcoded channel. The server says
+  // which channels can actually deliver (available_channels) and this
+  // follows it -- a hardcoded 'whatsapp' default once shipped while the
+  // API had no WhatsApp credentials, so every such order silently sent
+  // nothing. Null until the table resolves.
+  const [channel, setChannel] = useState<ContactChannel | null>(null);
   const [contact, setContact] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -28,6 +30,14 @@ export function OrderPage() {
   // WhatsApp and SMS are both addressed by the same E.164 number, so the
   // field is shared and switching between them needs no re-entry.
   const isPhoneChannel = channel === 'whatsapp' || channel === 'sms';
+
+  // Preference order: WhatsApp first where it's available, since that's
+  // the whole point of adding it -- but only ever among channels the
+  // server says it can actually send on.
+  const offered = data?.available_channels ?? [];
+  useEffect(() => {
+    if (!channel && offered.length > 0) setChannel(offered[0]);
+  }, [channel, offered]);
 
   useEffect(() => {
     if (!slug || !qrToken) {
@@ -63,7 +73,7 @@ export function OrderPage() {
   const totalPrice = [...cart.entries()].reduce((sum, [id, qty]) => sum + Number(itemById.get(id)?.price ?? 0) * qty, 0);
 
   async function submitOrder() {
-    if (!slug || !qrToken || !contact.trim()) {
+    if (!slug || !qrToken || !contact.trim() || !channel) {
       showToast('Enter a contact number or email so we can send your tracking link.');
       return;
     }
@@ -161,10 +171,16 @@ export function OrderPage() {
           <label htmlFor="channel" style={{ marginTop: 16 }}>
             Get your updates and receipt by
           </label>
-          <select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as ContactChannel)}>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="sms">SMS</option>
-            <option value="email">Email</option>
+          <select
+            id="channel"
+            value={channel ?? ''}
+            onChange={(e) => setChannel(e.target.value as ContactChannel)}
+          >
+            {offered.map((c) => (
+              <option key={c} value={c}>
+                {c === 'whatsapp' ? 'WhatsApp' : c === 'sms' ? 'SMS' : 'Email'}
+              </option>
+            ))}
           </select>
           <label htmlFor="contact">
             {isPhoneChannel ? 'Phone number' : 'Email address'}

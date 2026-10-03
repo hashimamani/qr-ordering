@@ -8,10 +8,18 @@ import {
   type WaiterTableSession,
 } from './tables.repository';
 import { listMenuForRestaurant } from '../menu/menu.repository';
+import { availableChannels } from '../notifications/notifications.providers';
+import type { NotificationChannel } from '../notifications/notifications.types';
 import { broadcastEvent } from '../../realtime/broadcaster';
 
 export interface ResolveTableResult {
   restaurant: { name: string; slug: string; brand_color: string | null };
+  /**
+   * Channels this deployment can actually deliver on. The order form
+   * offers only these and defaults to the first -- see availableChannels
+   * for why the offer is derived from the sender's own config.
+   */
+  available_channels: NotificationChannel[];
   table_session_status: 'active' | 'awaiting_payment' | 'closed';
   menu: {
     categories: { id: string; name: string; sort_order: number }[];
@@ -37,6 +45,7 @@ export async function resolveTableForOrdering(
 
   return {
     restaurant: { name: restaurant.name, slug: restaurant.slug, brand_color: restaurant.brand_color },
+    available_channels: availableChannels(),
     table_session_status: session.status,
     menu,
   };

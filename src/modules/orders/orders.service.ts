@@ -23,6 +23,7 @@ import { trackingUrlFor } from '../../lib/urls';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { assertContactValueMatchesChannel, normalizeContactValue, type CreateOrderInput } from './orders.validation';
 import { getNotificationQueue } from '../notifications/notifications.queue';
+import { availableChannels } from '../notifications/notifications.providers';
 import { getReportingQueue } from '../reports/events/reportingEvents.queue';
 import {
   issueReceiptForOrder,
@@ -55,6 +56,18 @@ async function createOrderForTable(
 ): Promise<{ order: { id: string; public_token: string }; trackingUrl: string; destinations: Set<'kitchen' | 'bar'> }> {
   const input = normalizeContactValue(rawInput);
   assertContactValueMatchesChannel(input);
+
+  // Browsers cache the order form, so a stale bundle can still submit a
+  // channel this deployment can't deliver on. Rejecting here is
+  // deliberate: the alternative is accepting an order the customer can
+  // never be messaged about, which is exactly the silent failure this
+  // check exists to end. They're standing at the table and can re-pick in
+  // seconds.
+  if (!availableChannels().includes(input.contact_channel)) {
+    throw new ValidationError(
+      `We can't send to ${input.contact_channel} right now -- please choose another way to receive your order updates`,
+    );
+  }
 
   const session = await findOrCreateActiveSession(table.id);
 

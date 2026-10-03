@@ -244,3 +244,49 @@ export function getProviderForChannel(channel: NotificationChannel): Notificatio
   }
   return new SesEmailProvider(fromAddress);
 }
+
+/**
+ * Which channels can actually deliver right now.
+ *
+ * Exists because the two halves of "offer a channel" and "be able to send
+ * on it" drifted apart once: the order form defaulted customers to
+ * WhatsApp while the deployed API had no WhatsApp credentials, so every
+ * such order fell through to ConsoleProvider -- which reports success and
+ * sends nothing. The customer got no tracking link and no receipt, and
+ * notification_log recorded it as 'sent'. Silent, and mislabelled in our
+ * own audit trail.
+ *
+ * Deriving the offer from the same config the sender reads makes that
+ * particular mistake structurally impossible rather than something to
+ * remember.
+ *
+ * In dry-run (local dev) everything is offered: nothing really sends, and
+ * being able to exercise every channel is the point.
+ */
+export function availableChannels(): NotificationChannel[] {
+  if (process.env.NOTIFICATIONS_DRY_RUN !== 'false') {
+    return ['whatsapp', 'sms', 'email'];
+  }
+
+  const channels: NotificationChannel[] = [];
+
+  if (
+    process.env.WHATSAPP_PHONE_NUMBER_ID &&
+    process.env.WHATSAPP_ACCESS_TOKEN &&
+    // A configured number with no templates still can't send anything:
+    // business-initiated WhatsApp is templates-only.
+    process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED
+  ) {
+    channels.push('whatsapp');
+  }
+
+  if (process.env.AFRICASTALKING_API_KEY && process.env.AFRICASTALKING_USERNAME) {
+    channels.push('sms');
+  }
+
+  if (process.env.SES_FROM_ADDRESS) {
+    channels.push('email');
+  }
+
+  return channels;
+}
