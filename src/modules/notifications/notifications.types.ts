@@ -17,6 +17,5 @@ export interface NotificationJob {
      * attach it. Distinct from receiptUrl, which is the customer-facing
      * page behind the last-4 challenge.
      */
-    receiptMediaUrl?: string;
   };
 }

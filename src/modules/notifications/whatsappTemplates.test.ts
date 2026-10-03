@@ -22,7 +22,7 @@ beforeEach(() => {
   for (const key of ENV_KEYS) saved[key] = process.env[key];
   process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED = 'tab_order_received';
   process.env.WHATSAPP_TEMPLATE_ORDER_READY = 'tab_order_ready';
-  process.env.WHATSAPP_TEMPLATE_RECEIPT = 'tab_receipt';
+  process.env.WHATSAPP_TEMPLATE_RECEIPT = 'tab_receipt_link';
   delete process.env.WHATSAPP_TEMPLATE_LANGUAGE;
 });
 
@@ -50,13 +50,12 @@ function job(trigger: NotificationTrigger, extra: Partial<NotificationJob['templ
 const receiptJob = () =>
   job('receipt', {
     receiptUrl: 'https://tab.example/receipt/xyz',
-    receiptMediaUrl: 'https://tab.example/media/one-time',
   });
 
 describe('template configuration', () => {
   it('resolves a name per trigger', () => {
     expect(templateNameFor('order_received')).toBe('tab_order_received');
-    expect(templateNameFor('receipt')).toBe('tab_receipt');
+    expect(templateNameFor('receipt')).toBe('tab_receipt_link');
   });
 
   it('reports missing names so the gap is visible', () => {
@@ -99,14 +98,10 @@ describe('parameter order', () => {
     ]);
   });
 
-  it('receipt: restaurant then receipt URL, with the PDF in the header', () => {
+  it('receipt: restaurant then receipt URL, carried as a link', () => {
     const t = renderWhatsAppTemplate(receiptJob());
     expect(t.bodyParams).toEqual(['Amani Grill', 'https://tab.example/receipt/xyz']);
-    expect(t.header).toEqual({
-      kind: 'document',
-      link: 'https://tab.example/media/one-time',
-      filename: 'receipt.pdf',
-    });
+    expect(t.header).toEqual({ kind: 'none' });
   });
 
   // The two URLs are both on the job and easy to confuse; sending the
@@ -123,16 +118,21 @@ describe('parameter order', () => {
   });
 });
 
-describe('receipt document header', () => {
-  // A DOCUMENT header has nothing to fall back to. Failing loudly beats
-  // sending "your receipt is attached" with no attachment.
-  it('refuses to send a receipt with no media URL', () => {
-    expect(() =>
-      renderWhatsAppTemplate(job('receipt', { receiptUrl: 'https://tab.example/receipt/xyz' })),
-    ).toThrow(WhatsAppTemplateError);
+describe('receipt link', () => {
+  // Meta rejects an empty parameter, and were it accepted the customer
+  // would read "download your receipt here:" followed by nothing.
+  it('refuses to send a receipt with no receipt URL', () => {
+    expect(() => renderWhatsAppTemplate(job('receipt', {}))).toThrow(WhatsAppTemplateError);
   });
 
-  it('does not require a media URL for non-receipt templates', () => {
+  // Guards the decision to stop attaching the PDF: a DOCUMENT header
+  // would hand a bearer-free receipt URL to Meta's fetchers, bypassing
+  // the last-4 challenge that protects the document.
+  it('sends no attachment, so nothing fetches the PDF on the customer behalf', () => {
+    expect(renderWhatsAppTemplate(receiptJob()).header.kind).toBe('none');
+  });
+
+  it('does not require a receipt URL for non-receipt templates', () => {
     for (const trigger of TRIGGERS.filter((t) => t !== 'receipt')) {
       expect(() => renderWhatsAppTemplate(job(trigger))).not.toThrow();
     }
@@ -155,8 +155,16 @@ describe('Meta component serialisation', () => {
     ]);
   });
 
+  // No trigger currently renders a document header, but the serialiser
+  // still supports one for when attachments are revisited -- header must
+  // precede body or Meta rejects the send.
   it('emits the document header before the body, as Meta expects', () => {
-    const components = toMetaComponents(renderWhatsAppTemplate(receiptJob())) as { type: string }[];
+    const components = toMetaComponents({
+      templateName: 'tab_receipt_doc',
+      languageCode: 'en_US',
+      header: { kind: 'document', link: 'https://tab.example/media/one-time', filename: 'receipt.pdf' },
+      bodyParams: ['Amani Grill'],
+    }) as { type: string }[];
     expect(components.map((c) => c.type)).toEqual(['header', 'body']);
     expect(components[0]).toEqual({
       type: 'header',

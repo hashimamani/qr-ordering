@@ -66,10 +66,18 @@ export class WhatsAppTemplateError extends Error {}
  *                         is ready."
  *   order_ready     BODY "Your order at {{1}} is ready. Details: {{2}}
  *                         Enjoy your meal!"
- *   receipt         HEADER(DOCUMENT) = the receipt PDF
- *                   BODY "Thanks for visiting {{1}}! Your receipt is
- *                         attached. You can also view it here: {{2}}
- *                         We hope to see you again soon."
+ *   receipt         BODY "Thanks for visiting {{1}}! You can view and
+ *                         download your receipt here: {{2}} We hope to
+ *                         see you again soon."
+ *
+ * The receipt template carries no attachment. Sending the PDF as a
+ * DOCUMENT header needs a URL Meta's servers can fetch, which means
+ * minting a single-use media token and handing a bearer-free receipt URL
+ * to a third party; a link the customer opens themselves keeps the
+ * last-4 challenge in front of the document. The media-token machinery
+ * (receipts.service.mintReceiptMediaUrl and the media branch of
+ * GET /receipt/:token/pdf) is still in place for when attachments are
+ * revisited -- it is simply not on this path.
  *
  * Each ends in static text rather than a variable, and that is not a
  * stylistic choice: Meta rejects a template whose body starts or ends
@@ -83,22 +91,23 @@ export function renderWhatsAppTemplate(job: NotificationJob): WhatsAppTemplateMe
     throw new WhatsAppTemplateError(`No WhatsApp template name configured for "${job.trigger}"`);
   }
 
-  const { restaurantName, trackingUrl, receiptUrl, receiptMediaUrl } = job.templateData;
+  const { restaurantName, trackingUrl, receiptUrl } = job.templateData;
   const languageCode = templateLanguage();
 
   if (job.trigger === 'receipt') {
-    // The DOCUMENT header IS the attachment, so without a media URL there
-    // is no valid send. Failing loudly is right: per the no-fallback
-    // decision this becomes a logged failure rather than quietly
-    // degrading to a "your receipt is attached" message with no receipt.
-    if (!receiptMediaUrl) {
-      throw new WhatsAppTemplateError('Receipt template requires a media URL for its document header');
+    // The receipt travels as a link, the same way it does over SMS -- no
+    // DOCUMENT header, so nothing has to fetch the PDF on the customer's
+    // behalf. An empty parameter is rejected by Meta and would otherwise
+    // render as "view it here:" followed by nothing, so a missing URL is
+    // a loud failure rather than a malformed message.
+    if (!receiptUrl) {
+      throw new WhatsAppTemplateError('Receipt template requires a receipt URL');
     }
     return {
       templateName,
       languageCode,
-      header: { kind: 'document', link: receiptMediaUrl, filename: 'receipt.pdf' },
-      bodyParams: [restaurantName, receiptUrl ?? ''],
+      header: { kind: 'none' },
+      bodyParams: [restaurantName, receiptUrl],
     };
   }
 

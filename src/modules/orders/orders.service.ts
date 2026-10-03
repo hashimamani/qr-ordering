@@ -28,7 +28,6 @@ import { getReportingQueue } from '../reports/events/reportingEvents.queue';
 import {
   issueReceiptForOrder,
   reissueReceiptForOrder,
-  mintReceiptMediaUrl,
   type IssuedReceipt,
 } from '../receipts/receipts.service';
 import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
@@ -272,13 +271,6 @@ async function sendReceiptMessage(orderId: string, issued: IssuedReceipt): Promi
     return;
   }
 
-  // WhatsApp attaches the PDF via a DOCUMENT header, which needs a URL the
-  // provider can fetch -- the customer-facing one is behind the last-4
-  // challenge. Only minted for WhatsApp; SMS and email carry the link
-  // alone, as before.
-  const receiptMediaUrl =
-    context.contact_channel === 'whatsapp' ? await mintReceiptMediaUrl(issued.token) : undefined;
-
   await getNotificationQueue().enqueue({
     orderId,
     channel: context.contact_channel,
@@ -288,7 +280,6 @@ async function sendReceiptMessage(orderId: string, issued: IssuedReceipt): Promi
       restaurantName: context.restaurant_name,
       trackingUrl: trackingUrlFor(context.public_token),
       receiptUrl: issued.url,
-      receiptMediaUrl,
     },
   });
 }
