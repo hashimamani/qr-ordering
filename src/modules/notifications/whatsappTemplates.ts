@@ -58,15 +58,24 @@ export function templateLanguage(): string {
 export class WhatsAppTemplateError extends Error {}
 
 /**
- * Approved on the WABA as UTILITY templates. The text must match what was
- * submitted, because the placeholder positions are the contract:
+ * Registered on the WABA as UTILITY templates. The text below is exactly
+ * what was submitted, because the placeholder positions are the contract:
  *
  *   order_received  BODY "Thanks for ordering at {{1}}! Track your order
- *                         here: {{2}}"
- *   order_ready     BODY "Your order at {{1}} is ready. Details: {{2}}"
+ *                         here: {{2}} We will message you again when it
+ *                         is ready."
+ *   order_ready     BODY "Your order at {{1}} is ready. Details: {{2}}
+ *                         Enjoy your meal!"
  *   receipt         HEADER(DOCUMENT) = the receipt PDF
  *                   BODY "Thanks for visiting {{1}}! Your receipt is
- *                         attached. You can also view it here: {{2}}"
+ *                         attached. You can also view it here: {{2}}
+ *                         We hope to see you again soon."
+ *
+ * Each ends in static text rather than a variable, and that is not a
+ * stylistic choice: Meta rejects a template whose body starts or ends
+ * with a placeholder ("Leading or Trailing Params Not Allowed",
+ * error_subcode 2388299). The first drafts here ended with the URL and
+ * were refused outright, so any future template needs a static closer.
  */
 export function renderWhatsAppTemplate(job: NotificationJob): WhatsAppTemplateMessage {
   const templateName = templateNameFor(job.trigger);
