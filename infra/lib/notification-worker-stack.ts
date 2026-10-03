@@ -59,6 +59,15 @@ export class NotificationWorkerStack extends Stack {
         DB_PORT: props.dbInstance.instanceEndpoint.port.toString(),
         DB_NAME: props.dbName,
         NOTIFICATIONS_DRY_RUN: 'false',
+        // This worker is what actually sends, so it needs the same
+        // WhatsApp config as the API Lambda. The access token comes from
+        // the app secret (loadSecretsIntoEnv), not from here.
+        WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
+        WHATSAPP_API_VERSION: 'v25.0',
+        WHATSAPP_TEMPLATE_LANGUAGE: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'en_US',
+        WHATSAPP_TEMPLATE_ORDER_RECEIVED: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED ?? '',
+        WHATSAPP_TEMPLATE_ORDER_READY: process.env.WHATSAPP_TEMPLATE_ORDER_READY ?? '',
+        WHATSAPP_TEMPLATE_RECEIPT: process.env.WHATSAPP_TEMPLATE_RECEIPT ?? '',
         LOG_LEVEL: 'info',
       },
     });

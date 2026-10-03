@@ -66,6 +66,10 @@ export async function sendNotification(job: NotificationJob): Promise<SendOutcom
     logger.error({ err, job }, 'failed to write notification_log row');
   }
 
+  // A provider may also classify its own failure (see SendResult.permanent)
+  // -- e.g. Meta answering 4xx, which no amount of retrying will change.
+  permanent = permanent || result.permanent === true;
+
   if (permanent) {
     // The durable record is the failed notification_log row above; this
     // log line is the operator-facing signal, since a permanent failure

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   renderWhatsAppTemplate,
-  templateIdFor,
-  missingTemplateIds,
+  toMetaComponents,
+  templateNameFor,
+  missingTemplateNames,
   WhatsAppTemplateError,
 } from './whatsappTemplates';
 import type { NotificationJob, NotificationTrigger } from './notifications.types';
@@ -10,17 +11,19 @@ import type { NotificationJob, NotificationTrigger } from './notifications.types
 const TRIGGERS: NotificationTrigger[] = ['order_received', 'order_ready', 'receipt'];
 
 const ENV_KEYS = [
-  'WHATSAPP_TEMPLATE_ID_ORDER_RECEIVED',
-  'WHATSAPP_TEMPLATE_ID_ORDER_READY',
-  'WHATSAPP_TEMPLATE_ID_RECEIPT',
+  'WHATSAPP_TEMPLATE_ORDER_RECEIVED',
+  'WHATSAPP_TEMPLATE_ORDER_READY',
+  'WHATSAPP_TEMPLATE_RECEIPT',
+  'WHATSAPP_TEMPLATE_LANGUAGE',
 ];
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
   for (const key of ENV_KEYS) saved[key] = process.env[key];
-  process.env.WHATSAPP_TEMPLATE_ID_ORDER_RECEIVED = 'tpl-received';
-  process.env.WHATSAPP_TEMPLATE_ID_ORDER_READY = 'tpl-ready';
-  process.env.WHATSAPP_TEMPLATE_ID_RECEIPT = 'tpl-receipt';
+  process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED = 'tab_order_received';
+  process.env.WHATSAPP_TEMPLATE_ORDER_READY = 'tab_order_ready';
+  process.env.WHATSAPP_TEMPLATE_RECEIPT = 'tab_receipt';
+  delete process.env.WHATSAPP_TEMPLATE_LANGUAGE;
 });
 
 afterEach(() => {
@@ -50,26 +53,31 @@ const receiptJob = () =>
     receiptMediaUrl: 'https://tab.example/media/one-time',
   });
 
-describe('template id configuration', () => {
-  it('resolves an id per trigger', () => {
-    expect(templateIdFor('order_received')).toBe('tpl-received');
-    expect(templateIdFor('order_ready')).toBe('tpl-ready');
-    expect(templateIdFor('receipt')).toBe('tpl-receipt');
+describe('template configuration', () => {
+  it('resolves a name per trigger', () => {
+    expect(templateNameFor('order_received')).toBe('tab_order_received');
+    expect(templateNameFor('receipt')).toBe('tab_receipt');
   });
 
-  it('reports which ids are missing, so the gap is visible at startup', () => {
-    delete process.env.WHATSAPP_TEMPLATE_ID_RECEIPT;
-    expect(missingTemplateIds()).toEqual(['receipt']);
+  it('reports missing names so the gap is visible', () => {
+    delete process.env.WHATSAPP_TEMPLATE_RECEIPT;
+    expect(missingTemplateNames()).toEqual(['receipt']);
   });
 
   it('treats an empty string as missing rather than sending against ""', () => {
-    process.env.WHATSAPP_TEMPLATE_ID_RECEIPT = '';
-    expect(templateIdFor('receipt')).toBeUndefined();
+    process.env.WHATSAPP_TEMPLATE_RECEIPT = '';
+    expect(templateNameFor('receipt')).toBeUndefined();
   });
 
-  it('refuses to render without a configured id', () => {
-    delete process.env.WHATSAPP_TEMPLATE_ID_ORDER_READY;
+  it('refuses to render without a configured name', () => {
+    delete process.env.WHATSAPP_TEMPLATE_ORDER_READY;
     expect(() => renderWhatsAppTemplate(job('order_ready'))).toThrow(WhatsAppTemplateError);
+  });
+
+  it('defaults the language but lets it be overridden to match the approved template', () => {
+    expect(renderWhatsAppTemplate(job('order_received')).languageCode).toBe('en_US');
+    process.env.WHATSAPP_TEMPLATE_LANGUAGE = 'en';
+    expect(renderWhatsAppTemplate(job('order_received')).languageCode).toBe('en');
   });
 });
 
@@ -77,55 +85,92 @@ describe('template id configuration', () => {
 // and reads as nonsense to a real customer -- no error, no log, nothing
 // to notice. Asserting position by position is the only way to catch it.
 describe('parameter order', () => {
-  it('order_received: restaurant in the header, tracking URL in the body', () => {
+  it('order_received: restaurant then tracking URL', () => {
     const t = renderWhatsAppTemplate(job('order_received'));
-    expect(t.templateId).toBe('tpl-received');
-    expect(t.headerValue).toBe('Amani Grill');
-    expect(t.bodyValues).toEqual(['https://tab.example/track/abc']);
+    expect(t.templateName).toBe('tab_order_received');
+    expect(t.bodyParams).toEqual(['Amani Grill', 'https://tab.example/track/abc']);
+    expect(t.header.kind).toBe('none');
   });
 
-  it('order_ready: restaurant in the header, tracking URL in the body', () => {
-    const t = renderWhatsAppTemplate(job('order_ready'));
-    expect(t.headerValue).toBe('Amani Grill');
-    expect(t.bodyValues).toEqual(['https://tab.example/track/abc']);
+  it('order_ready: restaurant then tracking URL', () => {
+    expect(renderWhatsAppTemplate(job('order_ready')).bodyParams).toEqual([
+      'Amani Grill',
+      'https://tab.example/track/abc',
+    ]);
   });
 
-  it('receipt: media URL in the header, restaurant then receipt URL in the body', () => {
+  it('receipt: restaurant then receipt URL, with the PDF in the header', () => {
     const t = renderWhatsAppTemplate(receiptJob());
-    expect(t.headerValue).toBe('https://tab.example/media/one-time');
-    expect(t.bodyValues).toEqual(['Amani Grill', 'https://tab.example/receipt/xyz']);
+    expect(t.bodyParams).toEqual(['Amani Grill', 'https://tab.example/receipt/xyz']);
+    expect(t.header).toEqual({
+      kind: 'document',
+      link: 'https://tab.example/media/one-time',
+      filename: 'receipt.pdf',
+    });
   });
 
-  // The two URLs are both on the job and are easy to confuse. Sending the
+  // The two URLs are both on the job and easy to confuse; sending the
   // tracking link as the receipt link would look entirely plausible.
-  it('receipt never puts the tracking URL where the receipt URL belongs', () => {
+  it('receipt never substitutes the tracking URL for the receipt URL', () => {
     const t = renderWhatsAppTemplate(receiptJob());
-    expect(t.bodyValues).not.toContain('https://tab.example/track/abc');
-    expect(t.headerValue).not.toBe('https://tab.example/track/abc');
+    expect(t.bodyParams).not.toContain('https://tab.example/track/abc');
   });
 
-  it('never emits a null or undefined value, which renders as a literal gap', () => {
+  it('never emits a non-string param, which renders as a literal gap', () => {
     for (const t of [renderWhatsAppTemplate(job('order_received')), renderWhatsAppTemplate(receiptJob())]) {
-      expect(typeof t.headerValue).toBe('string');
-      expect(t.headerValue.length).toBeGreaterThan(0);
-      for (const value of t.bodyValues) expect(typeof value).toBe('string');
+      for (const param of t.bodyParams) expect(typeof param).toBe('string');
     }
   });
 });
 
 describe('receipt document header', () => {
-  // A DOCUMENT header has nothing to fall back to -- headerValue is
-  // required by AT and can only be the media URL. Failing loudly beats
-  // sending a "your receipt is attached" message with no attachment.
+  // A DOCUMENT header has nothing to fall back to. Failing loudly beats
+  // sending "your receipt is attached" with no attachment.
   it('refuses to send a receipt with no media URL', () => {
     expect(() =>
       renderWhatsAppTemplate(job('receipt', { receiptUrl: 'https://tab.example/receipt/xyz' })),
     ).toThrow(WhatsAppTemplateError);
   });
 
-  it('does not require a media URL for the non-receipt templates', () => {
+  it('does not require a media URL for non-receipt templates', () => {
     for (const trigger of TRIGGERS.filter((t) => t !== 'receipt')) {
       expect(() => renderWhatsAppTemplate(job(trigger))).not.toThrow();
     }
+  });
+});
+
+// Meta rejects a malformed component with a generic error that doesn't say
+// which parameter was wrong, so the exact JSON is asserted here instead.
+describe('Meta component serialisation', () => {
+  it('emits a body component with text parameters in order', () => {
+    const components = toMetaComponents(renderWhatsAppTemplate(job('order_received')));
+    expect(components).toEqual([
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: 'Amani Grill' },
+          { type: 'text', text: 'https://tab.example/track/abc' },
+        ],
+      },
+    ]);
+  });
+
+  it('emits the document header before the body, as Meta expects', () => {
+    const components = toMetaComponents(renderWhatsAppTemplate(receiptJob())) as { type: string }[];
+    expect(components.map((c) => c.type)).toEqual(['header', 'body']);
+    expect(components[0]).toEqual({
+      type: 'header',
+      parameters: [
+        {
+          type: 'document',
+          document: { link: 'https://tab.example/media/one-time', filename: 'receipt.pdf' },
+        },
+      ],
+    });
+  });
+
+  it('omits the header component entirely when there is none', () => {
+    const components = toMetaComponents(renderWhatsAppTemplate(job('order_ready'))) as { type: string }[];
+    expect(components.some((c) => c.type === 'header')).toBe(false);
   });
 });

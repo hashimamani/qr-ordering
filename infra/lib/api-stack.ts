@@ -109,6 +109,17 @@ export class ApiStack extends Stack {
         // rather than left to the code default so the knob is visible
         // here, where someone changing the policy would look for it.
         RECEIPT_LINK_TTL_HOURS: '24',
+        // WhatsApp (Meta Cloud API). The access token is deliberately NOT
+        // here -- it's a bearer credential and lives in the app secret;
+        // these are just identifiers. Empty template names keep the
+        // channel dormant: getProviderForChannel falls back to the
+        // console provider until they're set, same as the email path.
+        WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
+        WHATSAPP_API_VERSION: 'v25.0',
+        WHATSAPP_TEMPLATE_LANGUAGE: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'en_US',
+        WHATSAPP_TEMPLATE_ORDER_RECEIVED: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED ?? '',
+        WHATSAPP_TEMPLATE_ORDER_READY: process.env.WHATSAPP_TEMPLATE_ORDER_READY ?? '',
+        WHATSAPP_TEMPLATE_RECEIPT: process.env.WHATSAPP_TEMPLATE_RECEIPT ?? '',
         LOG_LEVEL: 'info',
       },
     });

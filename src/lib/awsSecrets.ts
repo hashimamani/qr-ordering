@@ -18,6 +18,12 @@ interface AppSecret {
   africastalkingUsername?: string;
   africastalkingSenderId?: string;
   sesFromAddress?: string;
+  /**
+   * Meta Cloud API token for WhatsApp. Lives in the secret, not Lambda
+   * env, because it's a bearer credential -- the phone number id and
+   * template names beside it in api-stack.ts are not.
+   */
+  whatsappAccessToken?: string;
   vapidPublicKey?: string;
   vapidPrivateKey?: string;
   vapidSubject?: string;
@@ -75,6 +81,7 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         process.env.AFRICASTALKING_USERNAME = appSecret.africastalkingUsername ?? '';
         process.env.AFRICASTALKING_SENDER_ID = appSecret.africastalkingSenderId ?? '';
         process.env.SES_FROM_ADDRESS = appSecret.sesFromAddress ?? '';
+        process.env.WHATSAPP_ACCESS_TOKEN = appSecret.whatsappAccessToken ?? '';
         process.env.VAPID_PUBLIC_KEY = appSecret.vapidPublicKey ?? '';
         process.env.VAPID_PRIVATE_KEY = appSecret.vapidPrivateKey ?? '';
         process.env.VAPID_SUBJECT = appSecret.vapidSubject ?? '';

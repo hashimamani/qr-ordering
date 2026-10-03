@@ -2,13 +2,19 @@ import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import AfricasTalking from 'africastalking';
 import { logger } from '../../lib/logger';
 import type { NotificationChannel } from './notifications.types';
-import type { WhatsAppTemplateMessage } from './whatsappTemplates';
+import { toMetaComponents, type WhatsAppTemplateMessage } from './whatsappTemplates';
 
 export interface SendResult {
   success: boolean;
   providerResponse: string;
   /** Provider-side id, for tracing a "I never got it" back to the carrier. */
   providerMessageId?: string;
+  /**
+   * Set by a provider that can tell its own permanent failures from its
+   * transient ones, so the queue doesn't retry something that will fail
+   * identically every time.
+   */
+  permanent?: boolean;
 }
 
 export interface NotificationProvider {
@@ -114,29 +120,25 @@ class SesEmailProvider implements NotificationProvider {
 }
 
 /**
- * WhatsApp via Africa's Talking' chat API. Deliberately the same vendor as
- * the SMS provider above -- the credentials, account and billing already
- * exist, which is most of why this was the cheapest route to a channel
- * that isn't subject to promotional-SMS filtering.
+ * WhatsApp via Meta's Cloud API, integrated directly rather than through
+ * a reseller -- no markup, and template submission/status is managed in
+ * Meta's own console.
  *
- * Only ever sends templates. See the sendTemplate docs on
- * NotificationProvider for why free-form text isn't an option here.
+ * Only ever sends templates. Business-initiated WhatsApp messages can't
+ * carry free-form text: outside the 24-hour window opened by an inbound
+ * customer message (which never happens in our flow) only templates Meta
+ * has approved may be sent.
  */
-class AfricasTalkingWhatsAppProvider implements NotificationProvider {
-  private readonly client: ReturnType<typeof AfricasTalking>;
-
+class MetaCloudWhatsAppProvider implements NotificationProvider {
   constructor(
-    apiKey: string,
-    username: string,
-    private readonly waNumber: string,
-  ) {
-    this.client = AfricasTalking({ apiKey, username });
-  }
+    private readonly phoneNumberId: string,
+    private readonly accessToken: string,
+    private readonly apiVersion: string,
+  ) {}
 
-  // Present only to satisfy the interface. Reaching it would mean a
-  // caller routed a plain-text notification down the WhatsApp path, which
-  // Meta would reject anyway -- better to fail here with a clear reason
-  // than to be told "message undeliverable" by the provider.
+  // Present only to satisfy the interface. Reaching it would mean a caller
+  // routed plain text down the WhatsApp path, which Meta rejects anyway --
+  // better to fail here with a reason than to decode their error code.
   async send(): Promise<SendResult> {
     return {
       success: false,
@@ -145,31 +147,64 @@ class AfricasTalkingWhatsAppProvider implements NotificationProvider {
   }
 
   async sendTemplate(to: string, template: WhatsAppTemplateMessage): Promise<SendResult> {
+    const url = `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`;
+    const payload = {
+      messaging_product: 'whatsapp',
+      // Meta wants digits only. contact_value is stored E.164 ("+2547..."),
+      // so the leading + is stripped here rather than at rest -- every
+      // other channel, and the receipt last-4 challenge, wants it kept.
+      to: to.replace(/^\+/, ''),
+      type: 'template',
+      template: {
+        name: template.templateName,
+        language: { code: template.languageCode },
+        components: toMetaComponents(template),
+      },
+    };
+
     try {
-      const result = await this.client.WHATSAPP.sendMessage({
-        waNumber: this.waNumber,
-        phoneNumber: to,
-        body: {
-          templateId: template.templateId,
-          headerValue: template.headerValue,
-          bodyValues: template.bodyValues,
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(payload),
       });
-      // AT's chat API shape isn't as well documented as their SMS one, so
-      // this reads defensively rather than assuming a field: the id is for
-      // support tracing, and failing to find it must not fail the send.
-      const messageId =
-        (result as { messageId?: string; id?: string })?.messageId ??
-        (result as { id?: string })?.id;
+
+      const body = (await response.json().catch(() => ({}))) as {
+        messages?: { id: string }[];
+        error?: { message?: string; code?: number; error_subcode?: number };
+      };
+
+      if (!response.ok || body.error) {
+        // Meta's errors are the only diagnostic available when a template
+        // is unapproved, paused, or has the wrong parameter count, so the
+        // whole error object is preserved rather than just a message.
+        //
+        // 4xx means Meta understood us and refused: a wrong parameter
+        // count, an unapproved or paused template, an expired token, a
+        // number that isn't on WhatsApp. None of those change by trying
+        // again in ten seconds, and retrying writes the same failure row
+        // each time. 5xx and network errors are genuinely transient and
+        // stay retryable.
+        const permanent = response.status >= 400 && response.status < 500;
+        return {
+          success: false,
+          providerResponse: `meta ${response.status}: ${JSON.stringify(body.error ?? body)}`,
+          permanent,
+        };
+      }
+
       return {
         success: true,
-        providerResponse: JSON.stringify(result),
-        providerMessageId: messageId,
+        providerResponse: JSON.stringify(body),
+        providerMessageId: body.messages?.[0]?.id,
       };
     } catch (err) {
       return {
         success: false,
-        providerResponse: err instanceof Error ? err.message : JSON.stringify(err),
+        providerResponse: err instanceof Error ? err.message : 'unknown error',
       };
     }
   }
@@ -188,16 +223,19 @@ export function getProviderForChannel(channel: NotificationChannel): Notificatio
   }
 
   if (channel === 'whatsapp') {
-    const apiKey = process.env.AFRICASTALKING_API_KEY;
-    const username = process.env.AFRICASTALKING_USERNAME;
-    const waNumber = process.env.WHATSAPP_SENDER_NUMBER;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
     // Same fallback contract as the other channels: without credentials
-    // this logs instead of sending, which is what lets the whole WhatsApp
-    // path ship and be exercised before Meta has approved anything.
-    if (dryRun || !apiKey || !username || !waNumber) {
+    // this logs instead of sending, which is what lets the WhatsApp path
+    // ship and be exercised before any template is approved.
+    if (dryRun || !phoneNumberId || !accessToken) {
       return new ConsoleProvider('whatsapp');
     }
-    return new AfricasTalkingWhatsAppProvider(apiKey, username, waNumber);
+    return new MetaCloudWhatsAppProvider(
+      phoneNumberId,
+      accessToken,
+      process.env.WHATSAPP_API_VERSION || 'v25.0',
+    );
   }
 
   const fromAddress = process.env.SES_FROM_ADDRESS;
