@@ -790,3 +790,19 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
   font-size: 12px; line-height: 1.5; color: var(--ink-500);
   margin: -4px 0 14px;
 }
+
+/* Privacy notice -- long-form prose, which nothing else on the site is,
+   so it needs line length and spacing the card default does not give. */
+.policy-title { margin: 0 0 4px; }
+.policy-meta { margin: 0 0 18px; font-size: 13px; color: var(--ink-500); }
+.policy { line-height: 1.6; color: var(--ink-700); }
+.policy h2 {
+  font-size: 15px;
+  margin: 24px 0 8px;
+  color: var(--ink-900);
+}
+.policy h2:first-child { margin-top: 0; }
+.policy p { margin: 0 0 12px; }
+.policy ul { margin: 0 0 12px; padding-left: 20px; }
+.policy li { margin-bottom: 8px; }
+.policy strong { color: var(--ink-900); }

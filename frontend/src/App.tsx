@@ -16,6 +16,7 @@ import { OverviewSection } from './pages/admin/sections/OverviewSection';
 import { StationBoardSection } from './pages/admin/sections/StationBoardSection';
 import { FloorSection } from './pages/admin/sections/FloorSection';
 import { ManagementSection } from './pages/admin/sections/ManagementSection';
+import { PrivacyPage } from './pages/PrivacyPage';
 import { PlatformAdminLoginPage } from './pages/platform-admin/PlatformAdminLoginPage';
 import { PlatformAdminDashboardPage } from './pages/platform-admin/PlatformAdminDashboardPage';
 
@@ -28,6 +29,9 @@ export function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/staff/login" replace />} />
               <Route path="/order" element={<OrderPage />} />
+              {/* Public and unauthenticated by necessity: Meta requires a
+                  reachable privacy policy URL before the app can go Live. */}
+              <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/track/:token" element={<TrackPage />} />
               {/* Public like the tracking page -- gated by the link plus a
                   challenge, not by a staff session. */}

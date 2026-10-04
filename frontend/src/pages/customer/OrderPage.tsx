@@ -203,7 +203,13 @@ export function OrderPage() {
               ? "We'll message your order updates and receipt on WhatsApp. Standard rates may apply."
               : channel === 'sms'
                 ? "We'll text your order updates and receipt to this number."
-                : "We'll email your order updates and receipt to this address."}
+                : "We'll email your order updates and receipt to this address."}{' '}
+            {/* Linked at the point the number is handed over, not buried in a
+                footer -- this is the moment contact_consent_at is recorded,
+                so it is the moment the notice has to be reachable. */}
+            <a href="/privacy" target="_blank" rel="noreferrer">
+              Privacy
+            </a>
           </p>
           <button className="primary" disabled={submitting} onClick={submitOrder}>
             {submitting ? 'Placing order…' : `Place order · KSh ${totalPrice.toLocaleString()}`}
