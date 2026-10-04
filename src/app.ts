@@ -3,6 +3,7 @@ import pinoHttp from 'pino-http';
 import { ZodError } from 'zod';
 import { logger } from './lib/logger';
 import { AppError, ValidationError } from './lib/errors';
+import { requestCompletionMessage } from './lib/httpLogging';
 import { webhookRoutes } from './routes/webhookRoutes';
 import { customerRoutes } from './routes/customerRoutes';
 import { staffRoutes } from './routes/staffRoutes';
@@ -64,7 +65,16 @@ export function buildApp() {
       },
     }),
   );
-  app.use(pinoHttp({ logger }));
+  app.use(
+    pinoHttp({
+      logger,
+      // serverless-http's response never sets writableEnded, which
+      // pino-http's default message provider reads -- so in Lambda every
+      // request, 200s included, was logged "request aborted". See
+      // requestCompletionMessage for the measured signals.
+      customSuccessMessage: requestCompletionMessage,
+    }),
+  );
 
   app.use(webhookRoutes);
   app.use(customerRoutes);
