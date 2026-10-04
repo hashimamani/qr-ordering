@@ -12,9 +12,11 @@
  * worse than none.
  */
 
-// The single thing that must be set before this page is published. Meta
-// (and the Kenyan Data Protection Act) expect a working route to a human.
-const CONTACT_EMAIL = 'REPLACE-ME@example.com';
+// Meta (and the Kenyan Data Protection Act) expect a working route to a
+// human. Verify this address still receives mail before relying on it:
+// a published policy pointing at a dead mailbox is worse than useless,
+// since someone exercising a data request gets silence.
+const CONTACT_EMAIL = 'admin@amanilabs.co.ke';
 
 const LAST_UPDATED = '4 October 2026';
 
