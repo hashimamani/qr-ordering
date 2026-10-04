@@ -24,6 +24,15 @@ interface AppSecret {
    * template names beside it in api-stack.ts are not.
    */
   whatsappAccessToken?: string;
+  /**
+   * Meta App Secret -- signs the delivery webhook. Distinct from the
+   * access token: that one authenticates us to Meta, this one
+   * authenticates Meta to us. Without it the webhook refuses every
+   * callback, which is the safe direction.
+   */
+  whatsappAppSecret?: string;
+  /** Shared string Meta echoes back during the webhook handshake. */
+  whatsappWebhookVerifyToken?: string;
   vapidPublicKey?: string;
   vapidPrivateKey?: string;
   vapidSubject?: string;
@@ -82,6 +91,8 @@ export async function loadSecretsIntoEnv(): Promise<void> {
         process.env.AFRICASTALKING_SENDER_ID = appSecret.africastalkingSenderId ?? '';
         process.env.SES_FROM_ADDRESS = appSecret.sesFromAddress ?? '';
         process.env.WHATSAPP_ACCESS_TOKEN = appSecret.whatsappAccessToken ?? '';
+        process.env.WHATSAPP_APP_SECRET = appSecret.whatsappAppSecret ?? '';
+        process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = appSecret.whatsappWebhookVerifyToken ?? '';
         process.env.VAPID_PUBLIC_KEY = appSecret.vapidPublicKey ?? '';
         process.env.VAPID_PRIVATE_KEY = appSecret.vapidPrivateKey ?? '';
         process.env.VAPID_SUBJECT = appSecret.vapidSubject ?? '';

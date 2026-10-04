@@ -3,6 +3,7 @@ import pinoHttp from 'pino-http';
 import { ZodError } from 'zod';
 import { logger } from './lib/logger';
 import { AppError, ValidationError } from './lib/errors';
+import { webhookRoutes } from './routes/webhookRoutes';
 import { customerRoutes } from './routes/customerRoutes';
 import { staffRoutes } from './routes/staffRoutes';
 import { adminRoutes } from './routes/adminRoutes';
@@ -49,9 +50,23 @@ export function buildApp() {
     next();
   });
 
-  app.use(express.json());
+  app.use(
+    express.json({
+      // Meta signs the webhook body, and the signature is over the exact
+      // bytes sent -- a re-serialised JSON.stringify of the parsed object
+      // hashes differently (key order, whitespace) and would reject every
+      // genuine callback. Only kept for the webhook paths; retaining a
+      // raw copy of every order payload would be pure overhead.
+      verify: (req, _res, buf) => {
+        if (req.url?.startsWith('/webhooks/')) {
+          (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+        }
+      },
+    }),
+  );
   app.use(pinoHttp({ logger }));
 
+  app.use(webhookRoutes);
   app.use(customerRoutes);
   app.use(staffRoutes);
   app.use(adminRoutes);
