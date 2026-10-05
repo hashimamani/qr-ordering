@@ -1,5 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { StaffRole } from '../api/types';
+import { isTokenExpired } from './token';
+import { onUnauthorized } from '../api/client';
 
 export interface StaffSession {
   token: string;
@@ -31,7 +33,19 @@ interface StoredIdentity {
   brandColor: string | null;
 }
 
+function clearStoredSession(): void {
+  sessionStorage.removeItem('staffToken');
+  sessionStorage.removeItem('staffName');
+  sessionStorage.removeItem('restaurantName');
+  sessionStorage.removeItem('brandColor');
+}
+
 function decodeSession(token: string, identity: StoredIdentity): StaffSession | null {
+  // An expired token used to decode into a perfectly valid-looking
+  // session: ProtectedRoute let the user through, and then every request
+  // on the page 401'd into an error banner. Treating it as no session at
+  // all is what sends them to the login page instead.
+  if (isTokenExpired(token)) return null;
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     return {
@@ -63,6 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(() => {
     const token = sessionStorage.getItem('staffToken');
     if (!token) return null;
+    // Cleared here, in the initializer, rather than in an effect: an
+    // effect runs after the first render, leaving a window in which a
+    // child's own effect could fire a request carrying the dead token.
+    if (isTokenExpired(token)) {
+      clearStoredSession();
+      return null;
+    }
     return decodeSession(token, {
       name: sessionStorage.getItem('staffName') ?? '',
       restaurantName: sessionStorage.getItem('restaurantName') ?? '',
@@ -88,14 +109,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession((prev) => (prev ? { ...prev, restaurantName, brandColor } : prev));
       },
       logout: () => {
-        sessionStorage.removeItem('staffToken');
-        sessionStorage.removeItem('staffName');
-        sessionStorage.removeItem('restaurantName');
-        sessionStorage.removeItem('brandColor');
+        clearStoredSession();
         setSession(null);
       },
     }),
     [session],
+  );
+
+  // A session can also die mid-visit: the token was valid when the page
+  // loaded and the server rejected it later. Clearing on the 401 means
+  // ProtectedRoute redirects on the next render rather than the page
+  // filling with failures. Scoped by token so a platform-admin 401 in
+  // the same tab does not log a staff user out.
+  useEffect(
+    () =>
+      onUnauthorized((failedToken) => {
+        if (failedToken === sessionStorage.getItem('staffToken')) {
+          clearStoredSession();
+          setSession(null);
+        }
+      }),
+    [],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

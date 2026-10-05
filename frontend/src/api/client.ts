@@ -19,14 +19,39 @@ interface RequestOptions {
   authToken?: string;
 }
 
+/**
+ * Notified when a request that carried a token comes back 401, i.e. the
+ * session died server-side. Subscribers get the token that failed rather
+ * than a bare signal, so a provider can clear its own session without
+ * also logging out an unrelated one -- staff and platform-admin sessions
+ * can both be live in the same tab.
+ *
+ * Only authenticated requests qualify. A 401 from the login endpoint is
+ * a wrong password, not a dead session, and must not trigger any of this.
+ */
+type UnauthorizedHandler = (failedToken: string) => void;
+const unauthorizedHandlers = new Set<UnauthorizedHandler>();
+
+export function onUnauthorized(handler: UnauthorizedHandler): () => void {
+  unauthorizedHandlers.add(handler);
+  return () => {
+    unauthorizedHandlers.delete(handler);
+  };
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  let sentToken: string | undefined;
   if (options.authToken) {
+    sentToken = options.authToken;
     headers['Authorization'] = `Bearer ${options.authToken}`;
   } else if (options.auth) {
     const token = sessionStorage.getItem('staffToken');
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) {
+      sentToken = token;
+      headers['Authorization'] = `Bearer ${token}`;
+    }
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -39,6 +64,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
+    if (res.status === 401 && sentToken) {
+      for (const handler of unauthorizedHandlers) handler(sentToken);
+    }
     const message = data?.error?.message ?? res.statusText;
     throw new ApiError(res.status, message);
   }

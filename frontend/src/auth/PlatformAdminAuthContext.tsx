@@ -1,4 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isTokenExpired } from './token';
+import { onUnauthorized } from '../api/client';
 
 export interface PlatformAdminSession {
   token: string;
@@ -25,7 +27,16 @@ export function PlatformAdminAuthProvider({ children }: { children: ReactNode })
   const [session, setSession] = useState<PlatformAdminSession | null>(() => {
     const token = sessionStorage.getItem('platformAdminToken');
     const name = sessionStorage.getItem('platformAdminName') ?? '';
-    return token ? { token, name } : null;
+    // An already-expired token is no session at all, so the guard sends
+    // the user to login instead of into a page that only 401s.
+    if (!token) return null;
+    if (isTokenExpired(token)) {
+      // Same reasoning as AuthContext: drop it now, not in an effect.
+      sessionStorage.removeItem('platformAdminToken');
+      sessionStorage.removeItem('platformAdminName');
+      return null;
+    }
+    return { token, name };
   });
 
   const value = useMemo<PlatformAdminAuthContextValue>(
@@ -43,6 +54,18 @@ export function PlatformAdminAuthProvider({ children }: { children: ReactNode })
       },
     }),
     [session],
+  );
+
+  useEffect(
+    () =>
+      onUnauthorized((failedToken) => {
+        if (failedToken === sessionStorage.getItem('platformAdminToken')) {
+          sessionStorage.removeItem('platformAdminToken');
+          sessionStorage.removeItem('platformAdminName');
+          setSession(null);
+        }
+      }),
+    [],
   );
 
   return <PlatformAdminAuthContext.Provider value={value}>{children}</PlatformAdminAuthContext.Provider>;

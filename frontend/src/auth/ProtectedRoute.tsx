@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
+import { isTokenExpired } from './token';
 import type { StaffRole } from '../api/types';
 
 /**
@@ -11,9 +12,22 @@ import type { StaffRole } from '../api/types';
  * route; a client-side check alone would never be sufficient.
  */
 export function ProtectedRoute({ allowedRoles, children }: { allowedRoles: StaffRole[]; children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
 
-  if (!session) return <Navigate to="/staff/login" replace />;
+  // Checked on every navigation, not just at load: a token valid when the
+  // app opened can lapse while a dashboard sits on screen overnight, and
+  // without this the next route change renders a signed-in page whose
+  // every request then 401s.
+  const expired = session !== null && isTokenExpired(session.token);
+
+  // Clearing happens in an effect rather than during render -- setting
+  // state mid-render is what produces React's "cannot update while
+  // rendering" warning. The redirect below does not wait for it.
+  useEffect(() => {
+    if (expired) logout();
+  }, [expired, logout]);
+
+  if (!session || expired) return <Navigate to="/staff/login" replace />;
   if (!allowedRoles.includes(session.role)) return <Navigate to="/staff/login" replace />;
 
   return <>{children}</>;
