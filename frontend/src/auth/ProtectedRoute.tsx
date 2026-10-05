@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { isTokenExpired } from './token';
@@ -13,6 +13,14 @@ import type { StaffRole } from '../api/types';
  */
 export function ProtectedRoute({ allowedRoles, children }: { allowedRoles: StaffRole[]; children: ReactNode }) {
   const { session, logout } = useAuth();
+  const location = useLocation();
+
+  // Carried in router state rather than the URL: it keeps the login page
+  // clean and keeps the value out of anywhere an attacker could set it.
+  // Lost on a hard refresh of the login page, which just falls back to
+  // the role's default -- an acceptable trade for not putting a redirect
+  // target in a query string.
+  const from = `${location.pathname}${location.search}`;
 
   // Checked on every navigation, not just at load: a token valid when the
   // app opened can lapse while a dashboard sits on screen overnight, and
@@ -27,7 +35,10 @@ export function ProtectedRoute({ allowedRoles, children }: { allowedRoles: Staff
     if (expired) logout();
   }, [expired, logout]);
 
-  if (!session || expired) return <Navigate to="/staff/login" replace />;
+  if (!session || expired) return <Navigate to="/staff/login" state={{ from }} replace />;
+  // Deliberately no `from` here: this is a role mismatch, not a lapsed
+  // session, so sending them back to a page their role cannot open would
+  // just bounce them out again.
   if (!allowedRoles.includes(session.role)) return <Navigate to="/staff/login" replace />;
 
   return <>{children}</>;

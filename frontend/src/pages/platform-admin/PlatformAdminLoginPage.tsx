@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
 import type { PlatformAdminLoginResponse } from '../../api/types';
 import { usePlatformAdminAuth } from '../../auth/PlatformAdminAuthContext';
 import { useToast } from '../../components/ToastProvider';
 import { PasswordInput } from '../../components/PasswordInput';
+import { platformAdminDestination } from '../../auth/returnTo';
 
 export function PlatformAdminLoginPage() {
   const { login } = usePlatformAdminAuth();
   const navigate = useNavigate();
+  // Set by PlatformAdminProtectedRoute when a lapsed session interrupted
+  // a navigation.
+  const attempted = (useLocation().state as { from?: string } | null)?.from;
   const showToast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +26,7 @@ export function PlatformAdminLoginPage() {
         body: { email: email.trim(), password },
       });
       login(result.token, result.name);
-      navigate('/platform-admin');
+      navigate(platformAdminDestination(attempted), { replace: true });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {

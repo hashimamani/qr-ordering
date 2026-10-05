@@ -1,21 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
-import type { LoginResponse, StaffRole } from '../../api/types';
+import type { LoginResponse } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/ToastProvider';
 import { PasswordInput } from '../../components/PasswordInput';
-
-const ROLE_DESTINATION: Record<StaffRole, string> = {
-  admin: '/admin',
-  kitchen: '/staff/kitchen',
-  bar: '/staff/bar',
-  waiter: '/staff/waiter',
-};
+import { destinationAfterLogin } from '../../auth/returnTo';
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  // Set by ProtectedRoute when a lapsed session interrupted a navigation.
+  const attempted = (useLocation().state as { from?: string } | null)?.from;
   const showToast = useToast();
   // Empty, not a seeded demo slug: this page is shared by every tenant's
   // staff, so a prefilled value is wrong for all but one of them.
@@ -32,7 +28,7 @@ export function LoginPage() {
         body: { restaurant_slug: slug.trim(), phone_or_email: contact.trim(), password },
       });
       login(result.token, result.name, result.restaurant_name, result.brand_color);
-      navigate(ROLE_DESTINATION[result.role]);
+      navigate(destinationAfterLogin(result.role, attempted), { replace: true });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
