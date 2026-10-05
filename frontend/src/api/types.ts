@@ -265,7 +265,12 @@ export interface ActivityEntry {
 }
 
 export interface ReceiptChallengePrompt {
-  channel: 'sms' | 'email';
+  /**
+   * Mirrors the server's ChallengePrompt. 'whatsapp' was missing here,
+   * which is why the page could not branch on it and told WhatsApp
+   * recipients to enter an email address.
+   */
+  channel: 'sms' | 'email' | 'whatsapp';
   hint: string;
 }
 
@@ -276,12 +281,22 @@ export interface ReceiptLineItem {
   line_total: string;
 }
 
+export interface VatBreakdown {
+  net: string;
+  vat: string;
+  total: string;
+  ratePercent: number;
+}
+
 export interface ReceiptDetail {
   order_public_token: string;
   submitted_at: string;
   paid_at: string;
   restaurant_name: string;
   brand_color: string | null;
+  /** Computed server-side so this page and the PDF cannot disagree. */
+  vat: VatBreakdown | null;
+  vat_number: string | null;
   table_number: string;
   items: ReceiptLineItem[];
   total: string;

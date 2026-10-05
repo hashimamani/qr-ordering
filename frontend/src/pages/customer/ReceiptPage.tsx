@@ -8,7 +8,9 @@ import { useBrandColor } from '../../hooks/useBrandColor';
 import { DownloadIcon } from '../../components/icons';
 
 function money(value: string): string {
-  return `KSh ${Number(value).toLocaleString('en-KE', {
+  // Non-breaking space: on a narrow phone the currency would otherwise
+  // wrap onto its own line, leaving a bare "750.00" under a stray "KSh".
+  return `KSh\u00a0${Number(value).toLocaleString('en-KE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -130,6 +132,22 @@ export function ReceiptPage() {
                 ))}
               </tbody>
               <tfoot>
+                {receipt.vat && (
+                  <>
+                    <tr>
+                      <td colSpan={3} className="receipt-total-label">
+                        Subtotal
+                      </td>
+                      <td className="num">{money(receipt.vat.net)}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="receipt-total-label">
+                        VAT ({receipt.vat.ratePercent}%)
+                      </td>
+                      <td className="num">{money(receipt.vat.vat)}</td>
+                    </tr>
+                  </>
+                )}
                 <tr>
                   <td colSpan={3} className="receipt-total-label">
                     Total
@@ -140,7 +158,9 @@ export function ReceiptPage() {
             </table>
 
             <p className="report-footnote">
-              Total is the sum of the items listed. No taxes or service charges are applied or itemised.
+              {receipt.vat
+                ? 'Prices include VAT. The total is the amount charged.'
+                : 'Total is the sum of the items listed. No taxes or service charges are applied or itemised.'}
             </p>
 
             {receipt.prices_reconstructed && (
@@ -155,10 +175,20 @@ export function ReceiptPage() {
               {downloading ? 'Preparing…' : 'Download PDF'}
             </button>
           </div>
+          <p className="receipt-attribution">
+            Tab is a QR ordering system by AmaniLabs. For more information visit{' '}
+            <a href="https://amanilabs.co.ke" target="_blank" rel="noreferrer">
+              amanilabs.co.ke
+            </a>
+          </p>
         </main>
       </>
     );
   }
+
+  // SMS and WhatsApp are both addressed by phone number, so both are
+  // challenged on the last 4 digits. Only email asks for an address.
+  const isPhoneChannel = prompt?.channel === 'sms' || prompt?.channel === 'whatsapp';
 
   return (
     <>
@@ -172,7 +202,10 @@ export function ReceiptPage() {
           {prompt && (
             <>
               <p className="sub" style={{ marginTop: 0 }}>
-                {prompt.channel === 'sms' ? (
+                {/* whatsapp is a phone channel too -- it used to fall into
+                    the email branch, telling someone who got the receipt on
+                    WhatsApp to "enter that email address". */}
+                {isPhoneChannel ? (
                   <>
                     This receipt was sent to <strong>{prompt.hint}</strong>. Enter the last 4 digits of that
                     number to view it.
@@ -184,18 +217,16 @@ export function ReceiptPage() {
                   </>
                 )}
               </p>
-              <label htmlFor="answer">
-                {prompt.channel === 'sms' ? 'Last 4 digits' : 'Email address'}
-              </label>
+              <label htmlFor="answer">{isPhoneChannel ? 'Last 4 digits' : 'Email address'}</label>
               <input
                 id="answer"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
-                inputMode={prompt.channel === 'sms' ? 'numeric' : 'email'}
+                inputMode={isPhoneChannel ? 'numeric' : 'email'}
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder={prompt.channel === 'sms' ? '••••' : 'you@example.com'}
+                placeholder={isPhoneChannel ? '••••' : 'you@example.com'}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') verify();
                 }}

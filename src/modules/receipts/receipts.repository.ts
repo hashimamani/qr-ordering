@@ -1,4 +1,5 @@
 import { query } from '../../db/pool';
+import { vatBreakdown, type VatBreakdown } from '../../lib/receiptTotals';
 
 export interface ReceiptLookup {
   receipt_id: string;
@@ -29,6 +30,14 @@ export interface ReceiptDetail {
   paid_at: string;
   restaurant_name: string;
   brand_color: string | null;
+  /**
+   * The VAT contained in the total, or null when the restaurant presents
+   * none. Computed here rather than by each renderer so the PDF and the
+   * web receipt cannot disagree about the figures on the same document.
+   */
+  vat: VatBreakdown | null;
+  /** Seller's KRA PIN, shown only when set. */
+  vat_number: string | null;
   table_number: string;
   items: ReceiptLineItem[];
   total: string;
@@ -139,10 +148,13 @@ export async function findReceiptDetail(orderId: string): Promise<ReceiptDetail 
     paid_at: string;
     restaurant_name: string;
     brand_color: string | null;
+    vat_rate: string;
+    vat_number: string | null;
     table_number: string;
   }>(
     `SELECT o.public_token, o.submitted_at, rc.issued_at AS paid_at,
-            r.name AS restaurant_name, r.brand_color, t.table_number
+            r.name AS restaurant_name, r.brand_color, r.vat_rate, r.vat_number,
+            t.table_number
      FROM "order" o
      JOIN restaurant r ON r.id = o.restaurant_id
      JOIN table_session ts ON ts.id = o.table_session_id
@@ -176,9 +188,11 @@ export async function findReceiptDetail(orderId: string): Promise<ReceiptDetail 
     paid_at: order.paid_at,
     restaurant_name: order.restaurant_name,
     brand_color: order.brand_color,
+    vat_number: order.vat_number,
     table_number: order.table_number,
     items: itemsResult.rows,
     total: total.toFixed(2),
+    vat: vatBreakdown(total.toFixed(2), order.vat_rate) ?? null,
     prices_reconstructed,
   };
 }
