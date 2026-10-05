@@ -806,3 +806,25 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
 .policy ul { margin: 0 0 12px; padding-left: 20px; }
 .policy li { margin-bottom: 8px; }
 .policy strong { color: var(--ink-900); }
+
+/* Platform-admin test/live mode and the reset panel. button.danger is
+   already defined above and is reused as-is -- resetting a restaurant is
+   the same kind of irreversible action those buttons already mark. */
+.mode-test { background: var(--amber-50); color: var(--amber-700); }
+.mode-live { background: var(--green-50); color: var(--green-700); }
+
+.danger-card { border-color: var(--red-200); }
+.danger-card code {
+  background: var(--ink-100);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.reset-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 14px 0 18px; }
+@media (max-width: 640px) { .reset-split { grid-template-columns: 1fr; gap: 12px; } }
+.reset-heading {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ink-500); margin-bottom: 6px;
+}
+.reset-list { margin: 0; padding-left: 18px; font-size: 13px; color: var(--ink-600); line-height: 1.6; }
+.row-actions { white-space: nowrap; }

@@ -40,6 +40,8 @@ export interface RestaurantSummary {
   id: string;
   name: string;
   slug: string;
+  /** 'test' tenants are the only ones the reset endpoint will touch. */
+  mode: 'test' | 'live';
   created_at: string;
 }
 
@@ -50,7 +52,7 @@ export interface RestaurantSummary {
 // guarantee every staff/admin route otherwise depends on.
 export async function listAllRestaurants(): Promise<RestaurantSummary[]> {
   const result = await query<RestaurantSummary>(
-    'SELECT id, name, slug, created_at FROM restaurant ORDER BY created_at DESC',
+    'SELECT id, name, slug, mode, created_at FROM restaurant ORDER BY created_at DESC',
   );
   return result.rows;
 }

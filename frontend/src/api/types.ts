@@ -137,11 +137,25 @@ export interface PlatformAdminLoginResponse {
   name: string;
 }
 
+export type RestaurantMode = 'test' | 'live';
+
 export interface RestaurantSummary {
   id: string;
   name: string;
   slug: string;
+  /** Only 'test' restaurants can have their trading history reset. */
+  mode: RestaurantMode;
   created_at: string;
+}
+
+export interface ResetCounts {
+  orders: number;
+  table_sessions: number;
+}
+
+export interface ResetPreview {
+  restaurant: { id: string; name: string; slug: string; mode: RestaurantMode };
+  counts: ResetCounts;
 }
 
 export interface RestaurantSignupResponse {

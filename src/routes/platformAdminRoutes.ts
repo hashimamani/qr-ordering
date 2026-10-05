@@ -2,8 +2,18 @@ import { Router } from 'express';
 import { asyncHandler } from '../lib/asyncHandler';
 import { ValidationError } from '../lib/errors';
 import { requirePlatformAdminAuth } from '../middleware/platformAdminAuth';
-import { platformAdminLoginSchema, resetAdminPasswordSchema } from '../modules/platformAdmin/platformAdmin.validation';
+import {
+  platformAdminLoginSchema,
+  resetAdminPasswordSchema,
+  restaurantModeSchema,
+  resetRestaurantSchema,
+} from '../modules/platformAdmin/platformAdmin.validation';
 import { loginPlatformAdmin, resetRestaurantAdminPassword } from '../modules/platformAdmin/platformAdmin.service';
+import {
+  changeRestaurantMode,
+  previewRestaurantReset,
+  resetRestaurant,
+} from '../modules/platformAdmin/restaurantReset.service';
 import { restaurantSignupSchema } from '../modules/admin/admin.validation';
 import { signUpRestaurant } from '../modules/admin/admin.service';
 import { listAllRestaurants } from '../modules/admin/admin.repository';
@@ -61,5 +71,39 @@ platformAdminRoutes.patch(
     if (!parsed.success) throw new ValidationError('Invalid password payload', parsed.error.flatten());
     await resetRestaurantAdminPassword(req.params.staffId, parsed.data.password);
     res.status(204).send();
+  }),
+);
+
+platformAdminRoutes.patch(
+  '/platform-admin/restaurants/:id/mode',
+  asyncHandler(async (req, res) => {
+    const parsed = restaurantModeSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid mode payload', parsed.error.flatten());
+    const restaurant = await changeRestaurantMode(req.params.id, parsed.data.mode, {
+      id: req.platformAdmin!.sub,
+    });
+    res.json({ restaurant });
+  }),
+);
+
+// A GET so the UI can show what would actually be destroyed before
+// anyone commits to it -- "this will delete 46 orders" is a far better
+// prompt than "are you sure?".
+platformAdminRoutes.get(
+  '/platform-admin/restaurants/:id/reset',
+  asyncHandler(async (req, res) => {
+    res.json(await previewRestaurantReset(req.params.id));
+  }),
+);
+
+platformAdminRoutes.post(
+  '/platform-admin/restaurants/:id/reset',
+  asyncHandler(async (req, res) => {
+    const parsed = resetRestaurantSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError('Invalid reset payload', parsed.error.flatten());
+    const counts = await resetRestaurant(req.params.id, parsed.data.confirm_slug, {
+      id: req.platformAdmin!.sub,
+    });
+    res.json({ cleared: counts });
   }),
 );

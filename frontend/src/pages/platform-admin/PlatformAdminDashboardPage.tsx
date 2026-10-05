@@ -3,7 +3,13 @@ import { TAB_BRAND_COLOR, derivePalette } from '../../lib/brandPalette';
 import { PasswordInput } from '../../components/PasswordInput';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, ApiError } from '../../api/client';
-import type { RestaurantAdmin, RestaurantSignupResponse, RestaurantSummary } from '../../api/types';
+import type {
+  RestaurantAdmin,
+  RestaurantMode,
+  RestaurantSignupResponse,
+  RestaurantSummary,
+  ResetPreview,
+} from '../../api/types';
 import { usePlatformAdminAuth } from '../../auth/PlatformAdminAuthContext';
 import { useToast } from '../../components/ToastProvider';
 
@@ -25,6 +31,10 @@ export function PlatformAdminDashboardPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [managingRestaurantId, setManagingRestaurantId] = useState<string | null>(null);
+  const [modeChangingId, setModeChangingId] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<ResetPreview | null>(null);
+  const [confirmSlug, setConfirmSlug] = useState('');
+  const [resetting, setResetting] = useState(false);
   const [admins, setAdmins] = useState<RestaurantAdmin[]>([]);
   const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -76,6 +86,62 @@ export function PlatformAdminDashboardPage() {
       showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
     } finally {
       setResettingId(null);
+    }
+  }
+
+  async function changeMode(r: RestaurantSummary, mode: RestaurantMode) {
+    setModeChangingId(r.id);
+    try {
+      await apiFetch(`/platform-admin/restaurants/${r.id}/mode`, {
+        method: 'PATCH',
+        authToken: session!.token,
+        body: { mode },
+      });
+      setRestaurants((prev) => prev.map((x) => (x.id === r.id ? { ...x, mode } : x)));
+      // A panel open for this restaurant is now describing a stale mode.
+      if (resetTarget?.restaurant.id === r.id) closeReset();
+      showToast(`${r.name} is now in ${mode} mode.`, 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not change mode.', 'error');
+    } finally {
+      setModeChangingId(null);
+    }
+  }
+
+  function closeReset() {
+    setResetTarget(null);
+    setConfirmSlug('');
+  }
+
+  // Loads what would actually be destroyed, so the prompt can state it
+  // rather than asking "are you sure?" about an unknown quantity.
+  async function openReset(r: RestaurantSummary) {
+    if (resetTarget?.restaurant.id === r.id) return closeReset();
+    setConfirmSlug('');
+    try {
+      const preview = await apiFetch<ResetPreview>(`/platform-admin/restaurants/${r.id}/reset`, {
+        authToken: session!.token,
+      });
+      setResetTarget(preview);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not load reset details.', 'error');
+    }
+  }
+
+  async function confirmReset() {
+    if (!resetTarget) return;
+    setResetting(true);
+    try {
+      const { cleared } = await apiFetch<{ cleared: { orders: number; table_sessions: number } }>(
+        `/platform-admin/restaurants/${resetTarget.restaurant.id}/reset`,
+        { method: 'POST', authToken: session!.token, body: { confirm_slug: confirmSlug } },
+      );
+      showToast(`Cleared ${cleared.orders} order(s) from ${resetTarget.restaurant.name}.`, 'success');
+      closeReset();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Reset failed.', 'error');
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -206,6 +272,7 @@ export function PlatformAdminDashboardPage() {
             <tr>
               <th>Name</th>
               <th>Slug</th>
+              <th>Mode</th>
               <th>Onboarded</th>
               <th></th>
             </tr>
@@ -215,17 +282,88 @@ export function PlatformAdminDashboardPage() {
               <tr key={r.id}>
                 <td>{r.name}</td>
                 <td>{r.slug}</td>
-                <td>{new Date(r.created_at).toLocaleDateString()}</td>
                 <td>
+                  <span className={`status-pill mode-${r.mode}`}>{r.mode}</span>
+                </td>
+                <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                <td className="row-actions">
                   <button className="secondary" onClick={() => toggleManage(r.id)}>
                     {managingRestaurantId === r.id ? 'Close' : 'Manage admins'}
-                  </button>
+                  </button>{' '}
+                  <button
+                    className="secondary"
+                    disabled={modeChangingId === r.id}
+                    onClick={() => changeMode(r, r.mode === 'test' ? 'live' : 'test')}
+                  >
+                    {modeChangingId === r.id ? '…' : r.mode === 'test' ? 'Mark live' : 'Mark test'}
+                  </button>{' '}
+                  {/* Only offered for test tenants. The server refuses a live
+                      one regardless; hiding it here keeps the destructive
+                      action out of reach rather than merely unsuccessful. */}
+                  {r.mode === 'test' && (
+                    <button className="danger" onClick={() => openReset(r)}>
+                      {resetTarget?.restaurant.id === r.id ? 'Close' : 'Reset data'}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         </div>
+
+        {resetTarget && (
+          <div className="card danger-card">
+            <h3 style={{ marginTop: 0 }}>Reset {resetTarget.restaurant.name}</h3>
+            <p className="sub">
+              This permanently deletes the restaurant's trading history. There is no undo and no backup
+              inside the app.
+            </p>
+            <div className="reset-split">
+              <div>
+                <div className="reset-heading">Will be deleted</div>
+                <ul className="reset-list">
+                  <li>
+                    <strong>{resetTarget.counts.orders}</strong> order(s), with their items, receipts,
+                    notification log and report data
+                  </li>
+                  <li>
+                    <strong>{resetTarget.counts.table_sessions}</strong> table session(s)
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <div className="reset-heading">Will be kept</div>
+                <ul className="reset-list">
+                  <li>Menu categories and items</li>
+                  <li>Tables and their QR codes — printed codes keep working</li>
+                  <li>Staff accounts and logins</li>
+                </ul>
+              </div>
+            </div>
+            <label>
+              Type <code>{resetTarget.restaurant.slug}</code> to confirm
+            </label>
+            <input
+              value={confirmSlug}
+              onChange={(e) => setConfirmSlug(e.target.value)}
+              placeholder={resetTarget.restaurant.slug}
+              autoComplete="off"
+            />
+            <div style={{ marginTop: 12 }}>
+              <button
+                className="danger"
+                disabled={resetting || confirmSlug !== resetTarget.restaurant.slug}
+                onClick={confirmReset}
+              >
+                {resetting ? 'Resetting…' : 'Reset this restaurant'}
+              </button>{' '}
+              <button className="secondary" onClick={closeReset}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {managingRestaurantId && (
           <div className="card">
