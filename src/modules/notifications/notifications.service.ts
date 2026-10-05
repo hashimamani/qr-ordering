@@ -1,6 +1,13 @@
 import { logger } from '../../lib/logger';
 import { renderTemplate } from './notifications.templates';
-import { renderWhatsAppTemplate, WhatsAppTemplateError } from './whatsappTemplates';
+import {
+  renderWhatsAppTemplate,
+  renderWhatsAppReceiptWithDocument,
+  receiptDocumentTemplateName,
+  WhatsAppTemplateError,
+} from './whatsappTemplates';
+import { uploadWhatsAppMedia } from './whatsappMedia';
+import type { WhatsAppTemplateMessage } from './whatsappTemplates';
 import { getProviderForChannel, type SendResult } from './notifications.providers';
 import { insertNotificationLog } from './notifications.repository';
 import type { NotificationJob } from './notifications.types';
@@ -9,6 +16,51 @@ export interface SendOutcome {
   success: boolean;
   /** True when retrying cannot possibly help — a configuration or data error, not transport. */
   permanent: boolean;
+}
+
+/**
+ * Builds the WhatsApp message for a job, attaching the receipt PDF when
+ * that is configured and possible.
+ *
+ * The attachment is attempted, never required. Rendering and uploading
+ * are the two steps that can fail for reasons the customer had no part
+ * in -- a pdfkit problem, a Meta hiccup, a receipt row not found -- and
+ * a receipt arriving as a link is enormously better than no receipt at
+ * all. So any failure here degrades to the link-only template and is
+ * logged, rather than failing the send.
+ *
+ * Deliberately not a WhatsAppTemplateError path: that type marks
+ * permanent failures the queue must not retry, and "the upload hiccuped"
+ * is exactly the kind of thing a retry would fix.
+ */
+async function whatsAppTemplateFor(job: NotificationJob): Promise<WhatsAppTemplateMessage> {
+  if (job.trigger !== 'receipt' || !receiptDocumentTemplateName()) {
+    return renderWhatsAppTemplate(job);
+  }
+
+  try {
+    // Imported lazily for the same reason the report exporters are: it
+    // pulls in pdfkit, which should not sit on the cold-start path of a
+    // worker whose other two triggers never render anything.
+    const [{ findReceiptDetail }, { renderReceiptPdf }] = await Promise.all([
+      import('../receipts/receipts.repository'),
+      import('../receipts/receipts.pdf'),
+    ]);
+
+    const receipt = await findReceiptDetail(job.orderId);
+    if (!receipt) throw new Error('no receipt row for order');
+
+    const pdf = await renderReceiptPdf(receipt);
+    const filename = `${receipt.restaurant_name} receipt.pdf`.replace(/[/\\]/g, '-');
+    const mediaId = await uploadWhatsAppMedia(pdf, filename);
+    return renderWhatsAppReceiptWithDocument(job, mediaId, filename);
+  } catch (err) {
+    logger.warn(
+      { err, orderId: job.orderId },
+      'could not attach receipt PDF; sending the link-only receipt instead',
+    );
+    return renderWhatsAppTemplate(job);
+  }
 }
 
 /**
@@ -38,7 +90,7 @@ export async function sendNotification(job: NotificationJob): Promise<SendOutcom
       if (!provider.sendTemplate) {
         throw new Error(`Provider for channel "${job.channel}" cannot send templates`);
       }
-      result = await provider.sendTemplate(job.contactValue, renderWhatsAppTemplate(job));
+      result = await provider.sendTemplate(job.contactValue, await whatsAppTemplateFor(job));
     } else {
       result = await provider.send(job.contactValue, renderTemplate(job));
     }

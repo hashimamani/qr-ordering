@@ -120,6 +120,7 @@ export class ApiStack extends Stack {
         WHATSAPP_TEMPLATE_ORDER_RECEIVED: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED ?? '',
         WHATSAPP_TEMPLATE_ORDER_READY: process.env.WHATSAPP_TEMPLATE_ORDER_READY ?? '',
         WHATSAPP_TEMPLATE_RECEIPT: process.env.WHATSAPP_TEMPLATE_RECEIPT ?? '',
+        WHATSAPP_TEMPLATE_RECEIPT_DOC: process.env.WHATSAPP_TEMPLATE_RECEIPT_DOC ?? '',
         LOG_LEVEL: 'info',
       },
     });

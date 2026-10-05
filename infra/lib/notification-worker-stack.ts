@@ -46,8 +46,24 @@ export class NotificationWorkerStack extends Stack {
       depsLockFilePath: path.join(__dirname, '../../package-lock.json'),
       handler: 'handler',
       runtime: NODEJS_RUNTIME,
-      memorySize: 256,
-      timeout: Duration.seconds(20),
+      // Raised from 256MB/20s now that a receipt send renders the PDF
+      // and uploads it to Meta. Lambda CPU scales with memory and PDF
+      // generation is CPU-bound, so this is close to cost-neutral --
+      // duration drops roughly in proportion. The timeout has to cover
+      // render + upload + send, and an upload crossing the network is
+      // the part with a long tail.
+      memorySize: 1024,
+      timeout: Duration.seconds(60),
+      bundling: {
+        // pdfkit resolves its standard fonts through Node's package
+        // "imports" field and its ICC profile by a path relative to its
+        // own module location -- both need its real node_modules
+        // directory intact on disk, which esbuild's flattened bundle
+        // does not provide. Already learned the hard way on the API
+        // Lambda (see api-stack.ts); the receipt attachment is what
+        // brings pdfkit into this worker too.
+        nodeModules: ['pdfkit'],
+      },
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
@@ -68,6 +84,9 @@ export class NotificationWorkerStack extends Stack {
         WHATSAPP_TEMPLATE_ORDER_RECEIVED: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED ?? '',
         WHATSAPP_TEMPLATE_ORDER_READY: process.env.WHATSAPP_TEMPLATE_ORDER_READY ?? '',
         WHATSAPP_TEMPLATE_RECEIPT: process.env.WHATSAPP_TEMPLATE_RECEIPT ?? '',
+        // Empty keeps receipts as links. Set once the DOCUMENT-header
+        // template clears review and the PDF rides along instead.
+        WHATSAPP_TEMPLATE_RECEIPT_DOC: process.env.WHATSAPP_TEMPLATE_RECEIPT_DOC ?? '',
         LOG_LEVEL: 'info',
       },
     });

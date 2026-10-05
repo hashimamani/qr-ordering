@@ -26,7 +26,10 @@ import type { NotificationJob, NotificationTrigger } from './notifications.types
 export type TemplateHeader =
   | { kind: 'none' }
   | { kind: 'text'; text: string }
-  | { kind: 'document'; link: string; filename: string };
+  /** A URL Meta fetches itself. Unused: see whatsappMedia for why. */
+  | { kind: 'document'; link: string; filename: string }
+  /** Bytes already uploaded to Meta, referenced by id. */
+  | { kind: 'document_id'; id: string; filename: string };
 
 export interface WhatsAppTemplateMessage {
   templateName: string;
@@ -41,6 +44,46 @@ const TEMPLATE_NAME_ENV: Record<NotificationTrigger, string> = {
   order_ready: 'WHATSAPP_TEMPLATE_ORDER_READY',
   receipt: 'WHATSAPP_TEMPLATE_RECEIPT',
 };
+
+/**
+ * The receipt template that carries the PDF as a DOCUMENT header, as
+ * opposed to WHATSAPP_TEMPLATE_RECEIPT which only links to it. Separate
+ * because they are genuinely different approved templates with different
+ * body text ("your receipt is attached" vs "view it here"), and because
+ * leaving this unset is what keeps attachments off until the template
+ * clears review -- the same dormancy pattern the channel itself uses.
+ */
+const RECEIPT_DOCUMENT_TEMPLATE_ENV = 'WHATSAPP_TEMPLATE_RECEIPT_DOC';
+
+export function receiptDocumentTemplateName(): string | undefined {
+  return process.env[RECEIPT_DOCUMENT_TEMPLATE_ENV] || undefined;
+}
+
+/**
+ * The attachment variant. Falls back to the link-only template at the
+ * call site if the PDF cannot be rendered or uploaded -- a customer
+ * getting their receipt as a link beats not getting it at all.
+ */
+export function renderWhatsAppReceiptWithDocument(
+  job: NotificationJob,
+  mediaId: string,
+  filename = 'receipt.pdf',
+): WhatsAppTemplateMessage {
+  const templateName = receiptDocumentTemplateName();
+  if (!templateName) {
+    throw new WhatsAppTemplateError('No WhatsApp document template configured for receipts');
+  }
+  const { restaurantName, receiptUrl } = job.templateData;
+  if (!receiptUrl) {
+    throw new WhatsAppTemplateError('Receipt template requires a receipt URL');
+  }
+  return {
+    templateName,
+    languageCode: templateLanguage(),
+    header: { kind: 'document_id', id: mediaId, filename },
+    bodyParams: [restaurantName, receiptUrl],
+  };
+}
 
 export function templateNameFor(trigger: NotificationTrigger): string | undefined {
   return process.env[TEMPLATE_NAME_ENV[trigger]] || undefined;
@@ -138,6 +181,13 @@ export function toMetaComponents(template: WhatsAppTemplateMessage): unknown[] {
       type: 'header',
       parameters: [
         { type: 'document', document: { link: template.header.link, filename: template.header.filename } },
+      ],
+    });
+  } else if (template.header.kind === 'document_id') {
+    components.push({
+      type: 'header',
+      parameters: [
+        { type: 'document', document: { id: template.header.id, filename: template.header.filename } },
       ],
     });
   }

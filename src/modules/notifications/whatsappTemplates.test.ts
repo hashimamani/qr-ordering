@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
+  renderWhatsAppReceiptWithDocument,
   renderWhatsAppTemplate,
   toMetaComponents,
   templateNameFor,
@@ -180,5 +181,48 @@ describe('Meta component serialisation', () => {
   it('omits the header component entirely when there is none', () => {
     const components = toMetaComponents(renderWhatsAppTemplate(job('order_ready'))) as { type: string }[];
     expect(components.some((c) => c.type === 'header')).toBe(false);
+  });
+});
+
+describe('receipt with the PDF attached', () => {
+  const DOC_ENV = 'WHATSAPP_TEMPLATE_RECEIPT_DOC';
+
+  it('references the uploaded media by id, never by URL', () => {
+    process.env[DOC_ENV] = 'tab_receipt';
+    const t = renderWhatsAppReceiptWithDocument(receiptJob(), '1630371501773581');
+    expect(t.templateName).toBe('tab_receipt');
+    expect(t.header).toEqual({
+      kind: 'document_id',
+      id: '1630371501773581',
+      filename: 'receipt.pdf',
+    });
+    // The whole point of the media-id route: nothing in the outgoing
+    // message is a URL that would bypass the receipt's last-4 challenge.
+    expect(JSON.stringify(t.header)).not.toMatch(/https?:/);
+  });
+
+  it('keeps the same body params as the link-only template', () => {
+    process.env[DOC_ENV] = 'tab_receipt';
+    expect(renderWhatsAppReceiptWithDocument(receiptJob(), 'm1').bodyParams).toEqual([
+      'Amani Grill',
+      'https://tab.example/receipt/xyz',
+    ]);
+  });
+
+  it('refuses when no document template is configured', () => {
+    delete process.env[DOC_ENV];
+    expect(() => renderWhatsAppReceiptWithDocument(receiptJob(), 'm1')).toThrow(WhatsAppTemplateError);
+  });
+
+  it('serialises the header as a document id for Meta, header before body', () => {
+    process.env[DOC_ENV] = 'tab_receipt';
+    const components = toMetaComponents(
+      renderWhatsAppReceiptWithDocument(receiptJob(), 'media-123'),
+    ) as { type: string }[];
+    expect(components.map((c) => c.type)).toEqual(['header', 'body']);
+    expect(components[0]).toEqual({
+      type: 'header',
+      parameters: [{ type: 'document', document: { id: 'media-123', filename: 'receipt.pdf' } }],
+    });
   });
 });
