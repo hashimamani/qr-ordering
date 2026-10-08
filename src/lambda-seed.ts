@@ -11,6 +11,8 @@ interface SeedEvent {
    * that can reach the production database at all.
    */
   importMenu?: { slug: string; categories: ImportCategory[] };
+  /** Files an already-imported flat menu under main categories. */
+  regroupCategories?: { slug: string; groups: Record<string, string[]> };
 }
 
 /**
@@ -39,6 +41,13 @@ export async function handler(event: SeedEvent = {}): Promise<{ statusCode: numb
     const { slug, categories } = event.importMenu;
     const result = await importMenuForSlug(slug, categories);
     return { statusCode: 200, body: JSON.stringify({ imported: result }, null, 2) };
+  }
+
+  if (event.regroupCategories) {
+    const { regroupCategories } = await import('./modules/menu/menuImport');
+    const { slug, groups } = event.regroupCategories;
+    const result = await regroupCategories(slug, groups);
+    return { statusCode: 200, body: JSON.stringify({ regrouped: result }, null, 2) };
   }
 
   const { seedDatabase } = (await import('./db/seed')) as { seedDatabase: () => Promise<SeedResult> };
