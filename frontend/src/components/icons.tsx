@@ -303,3 +303,13 @@ export function SendIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Services station -- carwash, laundry and the like. */
+export function SparklesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+      <path d="M18 15l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z" />
+    </svg>
+  );
+}

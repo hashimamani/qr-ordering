@@ -4,6 +4,7 @@ import type { StaffRole } from '../api/types';
 export const ROLE_DESTINATION: Record<StaffRole, string> = {
   admin: '/admin',
   kitchen: '/staff/kitchen',
+  services: '/staff/services',
   bar: '/staff/bar',
   waiter: '/staff/waiter',
 };
@@ -18,6 +19,7 @@ export const ROLE_DESTINATION: Record<StaffRole, string> = {
  */
 const ROUTE_ROLES: ReadonlyArray<{ prefix: string; roles: readonly StaffRole[] }> = [
   { prefix: '/staff/kitchen', roles: ['admin', 'kitchen'] },
+  { prefix: '/staff/services', roles: ['admin', 'services'] },
   { prefix: '/staff/bar', roles: ['admin', 'bar'] },
   { prefix: '/staff/waiter', roles: ['admin', 'waiter'] },
   { prefix: '/admin', roles: ['admin'] },

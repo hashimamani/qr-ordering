@@ -1,11 +1,12 @@
 import { query } from '../../db/pool';
 import { NotFoundError } from '../../lib/errors';
+import type { StaffRole } from '../../lib/domain';
 
 export interface StaffUser {
   id: string;
   restaurant_id: string;
   name: string;
-  role: 'admin' | 'waiter' | 'kitchen' | 'bar';
+  role: StaffRole;
   phone_or_email: string;
   password_hash: string;
   created_at: string;

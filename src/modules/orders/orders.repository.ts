@@ -1,12 +1,13 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
 import { NotFoundError } from '../../lib/errors';
+import type { FulfilmentDestination } from '../../lib/domain';
 
 export interface CreateOrderItemInput {
   menu_item_id: string;
   quantity: number;
   notes?: string;
-  destination: 'kitchen' | 'bar';
+  destination: FulfilmentDestination;
   /**
    * The price this line is sold at, captured now. menu_item.price is
    * editable, so anything that reconstructs an order's value later --

@@ -41,6 +41,22 @@ describe('where a staff login lands', () => {
     }
   });
 
+  // The services station was added for venues selling carwash/laundry
+  // alongside food; it must route like any other station.
+  it('treats services as a station of its own', () => {
+    expect(destinationAfterLogin('services', '/staff/services')).toBe('/staff/services');
+    expect(ROLE_DESTINATION.services).toBe('/staff/services');
+  });
+
+  it('keeps stations separate from one another', () => {
+    expect(destinationAfterLogin('services', '/staff/kitchen')).toBe(ROLE_DESTINATION.services);
+    expect(destinationAfterLogin('kitchen', '/staff/services')).toBe(ROLE_DESTINATION.kitchen);
+  });
+
+  it('lets an admin return to the services station too', () => {
+    expect(destinationAfterLogin('admin', '/staff/services')).toBe('/staff/services');
+  });
+
   it('never returns to a login page', () => {
     expect(destinationAfterLogin('admin', '/staff/login')).toBe(ROLE_DESTINATION.admin);
     expect(destinationAfterLogin('admin', '/platform-admin/login')).toBe(ROLE_DESTINATION.admin);

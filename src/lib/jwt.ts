@@ -1,9 +1,10 @@
 import jwt from 'jsonwebtoken';
+import type { StaffRole } from '../lib/domain';
 
 export interface StaffTokenPayload {
   sub: string; // staff_user id
   restaurantId: string;
-  role: 'admin' | 'waiter' | 'kitchen' | 'bar';
+  role: StaffRole;
 }
 
 function requireSecret(envVar: string): string {

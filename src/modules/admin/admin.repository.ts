@@ -1,6 +1,7 @@
 import { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
+import type { FulfilmentDestination } from '../../lib/domain';
 
 export async function insertRestaurantWithAdmin(input: {
   restaurantName: string;
@@ -107,7 +108,7 @@ export interface MenuItemRow {
   name: string;
   description: string | null;
   price: string;
-  destination: 'kitchen' | 'bar';
+  destination: FulfilmentDestination;
   is_available: boolean;
 }
 
@@ -126,7 +127,7 @@ export async function insertMenuItem(
     name: string;
     description?: string;
     price: number;
-    destination: 'kitchen' | 'bar';
+    destination: FulfilmentDestination;
     isAvailable: boolean;
   },
 ): Promise<MenuItemRow> {
@@ -155,7 +156,7 @@ export async function updateMenuItemById(
     name?: string;
     description?: string;
     price?: number;
-    destination?: 'kitchen' | 'bar';
+    destination?: FulfilmentDestination;
     isAvailable?: boolean;
   },
 ): Promise<MenuItemRow> {

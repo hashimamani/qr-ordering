@@ -3,10 +3,11 @@ import { findStaffUserByRestaurantAndContact } from './staff.repository';
 import { verifyPassword } from '../../lib/password';
 import { signStaffToken } from '../../lib/jwt';
 import { UnauthorizedError } from '../../lib/errors';
+import type { StaffRole } from '../../lib/domain';
 
 export interface LoginResult {
   token: string;
-  role: 'admin' | 'waiter' | 'kitchen' | 'bar';
+  role: StaffRole;
   name: string;
   /**
    * Restaurant identity, returned here rather than put in the JWT: the

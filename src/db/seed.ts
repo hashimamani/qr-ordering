@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { pool } from './pool';
 import { generateToken } from '../lib/token';
 import { hashPassword } from '../lib/password';
+import type { StaffRole } from '../lib/domain';
 
 export interface SeedResult {
   restaurantSlug: string;
@@ -81,7 +82,7 @@ export async function seedDatabase(): Promise<SeedResult> {
 
     const demoPassword = 'password123';
     const demoPasswordHash = await hashPassword(demoPassword);
-    const demoStaff: { name: string; role: 'admin' | 'waiter' | 'kitchen' | 'bar'; contact: string }[] = [
+    const demoStaff: { name: string; role: StaffRole; contact: string }[] = [
       { name: 'Amani Admin', role: 'admin', contact: 'admin@amani-grill.test' },
       { name: 'Wanjiru Waiter', role: 'waiter', contact: 'waiter@amani-grill.test' },
       { name: 'Kamau Kitchen', role: 'kitchen', contact: 'kitchen@amani-grill.test' },

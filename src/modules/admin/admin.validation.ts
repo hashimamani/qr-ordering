@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { FULFILMENT_DESTINATIONS } from '../../lib/domain';
+
+// Built from the shared list so a new station is accepted by the API the
+// moment it exists, rather than being rejected by a validator nobody
+// remembered to update.
+const destinationEnum = z.enum(
+  FULFILMENT_DESTINATIONS as unknown as [string, ...string[]],
+) as z.ZodEnum<['kitchen', 'bar', 'services']>;
 
 // Mirrors the restaurant_brand_color_hex CHECK constraint. Validated here
 // as well as in the database because this value ends up interpolated into
@@ -40,7 +48,7 @@ export const createMenuItemSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   price: z.number().nonnegative(),
-  destination: z.enum(['kitchen', 'bar']),
+  destination: destinationEnum,
   is_available: z.boolean().default(true),
 });
 
@@ -55,7 +63,7 @@ export const assignWaiterSchema = z.object({
 });
 
 export const destinationParamSchema = z.object({
-  destination: z.enum(['kitchen', 'bar']),
+  destination: destinationEnum,
 });
 
 // Note the absence of an ordering constraint here: unlike the staff

@@ -6,6 +6,7 @@ import { useBrandColor } from '../hooks/useBrandColor';
 const NAV_LINKS: { to: string; label: string; roles: string[] }[] = [
   { to: '/admin', label: 'Admin', roles: ['admin'] },
   { to: '/staff/kitchen', label: 'Kitchen', roles: ['admin', 'kitchen'] },
+  { to: '/staff/services', label: 'Services', roles: ['admin', 'services'] },
   { to: '/staff/bar', label: 'Bar', roles: ['admin', 'bar'] },
   { to: '/staff/waiter', label: 'Waiter', roles: ['admin', 'waiter'] },
 ];

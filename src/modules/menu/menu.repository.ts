@@ -1,4 +1,5 @@
 import { query } from '../../db/pool';
+import type { FulfilmentDestination } from '../../lib/domain';
 
 export interface MenuCategory {
   id: string;
@@ -17,7 +18,7 @@ export interface MenuItem {
 
 export interface MenuItemForPricing extends MenuItem {
   restaurant_id: string;
-  destination: 'kitchen' | 'bar';
+  destination: FulfilmentDestination;
   category_name: string | null;
 }
 
@@ -46,7 +47,7 @@ export async function listMenuForRestaurant(
 }
 
 export interface MenuItemWithDestination extends MenuItem {
-  destination: 'kitchen' | 'bar';
+  destination: FulfilmentDestination;
 }
 
 // Admin's own menu view -- same data as listMenuForRestaurant, plus

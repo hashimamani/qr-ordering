@@ -16,6 +16,7 @@ import { OverviewSection } from './pages/admin/sections/OverviewSection';
 import { StationBoardSection } from './pages/admin/sections/StationBoardSection';
 import { FloorSection } from './pages/admin/sections/FloorSection';
 import { ManagementSection } from './pages/admin/sections/ManagementSection';
+import { ServicesPage } from './pages/staff/ServicesPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { PlatformAdminLoginPage } from './pages/platform-admin/PlatformAdminLoginPage';
 import { PlatformAdminDashboardPage } from './pages/platform-admin/PlatformAdminDashboardPage';
@@ -54,6 +55,14 @@ export function App() {
                 }
               />
               <Route
+                path="/staff/services"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'services']}>
+                    <ServicesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/staff/waiter"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'waiter']}>
@@ -78,6 +87,10 @@ export function App() {
                   element={<StationBoardSection destination="kitchen" title="Kitchen" />}
                 />
                 <Route path="bar" element={<StationBoardSection destination="bar" title="Bar" />} />
+                <Route
+                  path="services"
+                  element={<StationBoardSection destination="services" title="Services" />}
+                />
                 <Route path="floor" element={<FloorSection />} />
                 <Route path="management" element={<ManagementSection />} />
               </Route>

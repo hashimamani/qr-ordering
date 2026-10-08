@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { STAFF_ROLES } from '../../lib/domain';
+
+// From the shared list: this enum omitting a role meant the API would
+// refuse to create staff for a station that otherwise existed end to end.
+const roleEnum = z.enum(
+  STAFF_ROLES as unknown as [string, ...string[]],
+) as z.ZodEnum<['admin', 'waiter', 'kitchen', 'bar', 'services']>;
 
 export const staffLoginSchema = z.object({
   restaurant_slug: z.string().min(1),
@@ -8,7 +15,7 @@ export const staffLoginSchema = z.object({
 
 export const createStaffUserSchema = z.object({
   name: z.string().min(1).max(200),
-  role: z.enum(['admin', 'waiter', 'kitchen', 'bar']),
+  role: roleEnum,
   phone_or_email: z.string().min(3).max(254),
   password: z.string().min(8).max(200),
 });
@@ -16,7 +23,7 @@ export const createStaffUserSchema = z.object({
 export const updateStaffUserSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
-    role: z.enum(['admin', 'waiter', 'kitchen', 'bar']).optional(),
+    role: roleEnum.optional(),
     phone_or_email: z.string().min(3).max(254).optional(),
     password: z.string().min(8).max(200).optional(),
   })

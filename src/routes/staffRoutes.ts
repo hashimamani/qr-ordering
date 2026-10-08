@@ -13,6 +13,7 @@ import { upsertPushSubscription } from '../modules/push/push.repository';
 import { listMenuForRestaurant } from '../modules/menu/menu.repository';
 import { placeStaffOrder, markOrderPaid, resendReceipt } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
+import { PREPARING_ROLES } from '../lib/domain';
 
 export const staffRoutes = Router();
 
@@ -48,6 +49,18 @@ staffRoutes.get(
   requireRole('admin', 'bar'),
   asyncHandler(async (req, res) => {
     const queue = await getQueueForDestination(req.staff!.restaurantId, 'bar');
+    res.json({ tables: queue });
+  }),
+);
+
+// Mirrors /staff/kitchen and /staff/bar exactly -- a station is a queue
+// plus the one role allowed to work it, and services is no different.
+staffRoutes.get(
+  '/staff/services',
+  requireStaffAuth,
+  requireRole('admin', 'services'),
+  asyncHandler(async (req, res) => {
+    const queue = await getQueueForDestination(req.staff!.restaurantId, 'services');
     res.json({ tables: queue });
   }),
 );
@@ -156,7 +169,10 @@ staffRoutes.patch(
     if (!parsed.success) {
       throw new ValidationError('Invalid status payload', parsed.error.flatten());
     }
-    const allowedRoles = parsed.data.status === 'served' ? ['admin', 'waiter'] : ['admin', 'kitchen', 'bar'];
+    // PREPARING_ROLES rather than a literal list: a station role that is
+    // not in here cannot advance its own queue, which is a silent
+    // permission gap rather than a visible error.
+    const allowedRoles = parsed.data.status === 'served' ? ['admin', 'waiter'] : [...PREPARING_ROLES];
     if (!allowedRoles.includes(req.staff!.role)) {
       throw new ForbiddenError('Your role cannot perform this action');
     }

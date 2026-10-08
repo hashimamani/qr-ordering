@@ -1,6 +1,18 @@
-export type StaffRole = 'admin' | 'waiter' | 'kitchen' | 'bar';
+export type StaffRole = 'admin' | 'waiter' | 'kitchen' | 'bar' | 'services';
 export type OrderItemStatus = 'received' | 'preparing' | 'ready' | 'served';
-export type Destination = 'kitchen' | 'bar';
+/**
+ * Mirrors the server's FulfilmentDestination (src/lib/domain.ts).
+ * 'services' covers work that is neither cooked nor poured -- Chillax
+ * Zone's carwash and laundry, for instance.
+ */
+export type Destination = 'kitchen' | 'bar' | 'services';
+
+/** Rendered wherever a station has to be named in the UI. */
+export const DESTINATION_LABELS: Record<Destination, string> = {
+  kitchen: 'Kitchen',
+  bar: 'Bar',
+  services: 'Services',
+};
 /** WhatsApp is the default; SMS and email remain available. */
 export type ContactChannel = 'sms' | 'email' | 'whatsapp';
 

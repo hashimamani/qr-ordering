@@ -10,6 +10,7 @@ import {
   LogOutIcon,
   MenuIcon,
   SlidersIcon,
+  SparklesIcon,
   XIcon,
 } from '../../components/icons';
 
@@ -17,6 +18,7 @@ const SECTIONS = [
   { to: '/admin/overview', label: 'Overview', icon: LayoutGridIcon },
   { to: '/admin/kitchen', label: 'Kitchen', icon: ChefHatIcon },
   { to: '/admin/bar', label: 'Bar', icon: GlassIcon },
+  { to: '/admin/services', label: 'Services', icon: SparklesIcon },
   { to: '/admin/floor', label: 'Floor', icon: LayoutFloorIcon },
   { to: '/admin/management', label: 'Management', icon: SlidersIcon },
 ];

@@ -1,11 +1,17 @@
 import { verifyStaffToken } from '../lib/jwt';
+import type { FulfilmentDestination } from '../lib/domain';
 
 // 'admin' isn't a real order_item_destination -- it's a room suffix
 // reusing this same slot, deliberately, so isAuthorizedForRestaurantRoom's
 // existing `payload.role === 'admin' -> true` early return (and its
 // `payload.role === destination` fallback correctly rejecting kitchen/bar/
 // waiter roles from it) covers this room with zero new authorization logic.
-export type Destination = 'kitchen' | 'bar' | 'admin';
+/**
+ * Realtime rooms, which are the fulfilment stations plus an admin room
+ * that watches all of them. Expressed in terms of FulfilmentDestination
+ * so a new station becomes a room automatically.
+ */
+export type Destination = FulfilmentDestination | 'admin';
 
 export const ORDER_ROOM = /^order:[A-Za-z0-9-]+$/;
 export const RESTAURANT_ROOM = /^restaurant:([0-9a-fA-F-]{36}):(kitchen|bar|admin)$/;

@@ -34,6 +34,7 @@ import { broadcastEvent, closeRoom } from '../../realtime/broadcaster';
 import { broadcastToTableWaiter } from '../../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../../realtime/webPush';
 import { logger } from '../../lib/logger';
+import type { FulfilmentDestination } from '../../lib/domain';
 
 export interface PlaceOrderResult {
   public_token: string;
@@ -52,7 +53,7 @@ async function createOrderForTable(
   restaurant: Restaurant,
   table: RestaurantTable,
   rawInput: CreateOrderInput,
-): Promise<{ order: { id: string; public_token: string }; trackingUrl: string; destinations: Set<'kitchen' | 'bar'> }> {
+): Promise<{ order: { id: string; public_token: string }; trackingUrl: string; destinations: Set<FulfilmentDestination> }> {
   const input = normalizeContactValue(rawInput);
   assertContactValueMatchesChannel(input);
 

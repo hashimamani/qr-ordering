@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '../../api/client';
+import { DESTINATION_LABELS } from '../../api/types';
 import type { MenuCategory, MenuItem, Destination } from '../../api/types';
 import { Dialog } from '../../components/Dialog';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
+
+// Built from DESTINATION_LABELS so a new station appears in both the add
+// and edit forms without either being updated by hand -- the two selects
+// were previously separate hardcoded copies.
+const DESTINATION_OPTIONS = (Object.keys(DESTINATION_LABELS) as Destination[]).map((d) => (
+  <option key={d} value={d}>
+    {DESTINATION_LABELS[d]}
+  </option>
+));
 
 export function AdminMenuTab() {
   const showToast = useToast();
@@ -184,8 +194,7 @@ export function AdminMenuTab() {
               value={newItem.destination}
               onChange={(e) => setNewItem({ ...newItem, destination: e.target.value as Destination })}
             >
-              <option value="kitchen">Kitchen</option>
-              <option value="bar">Bar</option>
+              {DESTINATION_OPTIONS}
             </select>
           </div>
         </div>
@@ -290,8 +299,7 @@ export function AdminMenuTab() {
                   value={editingItem.destination}
                   onChange={(e) => setEditingItem({ ...editingItem, destination: e.target.value as Destination })}
                 >
-                  <option value="kitchen">Kitchen</option>
-                  <option value="bar">Bar</option>
+                  {DESTINATION_OPTIONS}
                 </select>
               </div>
             </div>

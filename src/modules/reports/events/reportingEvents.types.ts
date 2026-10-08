@@ -1,10 +1,11 @@
+import type { FulfilmentDestination } from '../../../lib/domain';
 export interface ReportingOrderItemFact {
   orderItemId: string;
   menuItemId: string;
   menuItemName: string;
   categoryId: string | null;
   categoryName: string | null;
-  destination: 'kitchen' | 'bar';
+  destination: FulfilmentDestination;
   quantity: number;
   unitPrice: string;
 }

@@ -15,6 +15,7 @@ import {
 import { insertStaffUser, updateStaffUser, type StaffUser } from '../staff/staff.repository';
 import type { createStaffUserSchema, updateStaffUserSchema } from '../staff/staff.validation';
 import type { z } from 'zod';
+import type { FulfilmentDestination } from '../../lib/domain';
 
 type CreateStaffUserInput = z.infer<typeof createStaffUserSchema>;
 type UpdateStaffUserInput = z.infer<typeof updateStaffUserSchema>;
@@ -56,7 +57,7 @@ export async function createMenuItemForRestaurant(
     name: string;
     description?: string;
     price: number;
-    destination: 'kitchen' | 'bar';
+    destination: FulfilmentDestination;
     is_available: boolean;
   },
 ): Promise<MenuItemRow> {

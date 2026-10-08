@@ -1,9 +1,10 @@
 import type { PoolClient } from 'pg';
 import { pool, query } from '../../db/pool';
 import { ConflictError, NotFoundError } from '../../lib/errors';
+import type { FulfilmentDestination, StaffRole } from '../../lib/domain';
 
 export type OrderItemStatus = 'received' | 'preparing' | 'ready' | 'served';
-export type Destination = 'kitchen' | 'bar';
+export type Destination = FulfilmentDestination;
 
 const STATUS_ORDER: OrderItemStatus[] = ['received', 'preparing', 'ready', 'served'];
 
@@ -112,7 +113,7 @@ export async function listStationBoard(
 
 export interface AuditActor {
   id: string;
-  role: 'admin' | 'waiter' | 'kitchen' | 'bar';
+  role: StaffRole;
   name: string;
 }
 
