@@ -926,3 +926,13 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
   border-left: 2px solid var(--ink-200);
 }
 .menu-admin-sub .category-title { margin: 0; }
+
+/* A destructive action sitting among ordinary ghost buttons in an order
+   footer -- coloured, but not given the full danger-button weight, since
+   it sits beside "Mark paid" rather than standing alone. */
+.ghost.danger-text { color: var(--red-700); }
+.ghost.danger-text:hover:not(:disabled) { background: var(--red-50); }
+/* A cancelled line on the tracking page keeps its place so the customer
+   can see what was called off, just visibly inactive. */
+.card.item-row.unavailable .status-pill { opacity: 0.7; }
+.status-cancelled { background: var(--red-50); color: var(--red-700); }

@@ -1,5 +1,5 @@
 export type StaffRole = 'admin' | 'waiter' | 'kitchen' | 'bar' | 'services';
-export type OrderItemStatus = 'received' | 'preparing' | 'ready' | 'served';
+export type OrderItemStatus = 'received' | 'preparing' | 'ready' | 'served' | 'cancelled';
 /**
  * Mirrors the server's FulfilmentDestination (src/lib/domain.ts).
  * 'services' covers work that is neither cooked nor poured -- Chillax

@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<OrderItemStatus, string> = {
   preparing: 'Preparing',
   ready: 'Ready',
   served: 'Served',
+  cancelled: 'Cancelled',
 };
 
 /**

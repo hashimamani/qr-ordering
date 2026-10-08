@@ -4,6 +4,7 @@ import type { IdleTable, WaiterTableSession } from '../../api/types';
 import { StaffLayout } from '../../components/StaffLayout';
 import { TakeOrderPanel } from '../../components/TakeOrderPanel';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Dialog } from '../../components/Dialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { BanknoteIcon, BellIcon, CheckIcon, ClipboardListIcon, SendIcon, XIcon } from '../../components/icons';
@@ -22,6 +23,9 @@ export function WaiterPage() {
   const [servingId, setServingId] = useState<string | null>(null);
   const [payingToken, setPayingToken] = useState<string | null>(null);
   const [resendingToken, setResendingToken] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const [takingOrderForTableId, setTakingOrderForTableId] = useState<string | null>(null);
   const [startTableId, setStartTableId] = useState('');
@@ -93,6 +97,26 @@ export function WaiterPage() {
   // Goes to the contact stored on the order, never one entered here --
   // the only recovery path if a receipt send failed or its link expired,
   // since there's deliberately no automatic channel fallback.
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await apiFetch(`/staff/orders/${cancelTarget}/cancel`, {
+        method: 'POST',
+        auth: true,
+        body: { reason: cancelReason.trim() || undefined },
+      });
+      setCancelTarget(null);
+      setCancelReason('');
+      load();
+      showToast('Order cancelled.', 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not cancel the order.');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   async function resendReceipt(publicToken: string) {
     setResendingToken(publicToken);
     try {
@@ -269,6 +293,14 @@ export function WaiterPage() {
                     {resendingToken === order.public_token ? 'Resending…' : 'Resend receipt'}
                   </button>
                 )}
+                {/* Only on unpaid orders: cancelling something paid for
+                    is a refund, which the server refuses outright. */}
+                {order.payment_status === 'unpaid' && (
+                  <button className="ghost danger-text" onClick={() => setCancelTarget(order.public_token)}>
+                    <XIcon size={14} />
+                    Cancel order
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -284,6 +316,32 @@ export function WaiterPage() {
         onConfirm={closeTable}
         onCancel={() => setConfirmClose(null)}
       />
+
+      <Dialog
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        title="Cancel this order?"
+        footer={
+          <>
+            <button className="secondary" onClick={() => setCancelTarget(null)}>
+              Keep it
+            </button>
+            <button className="danger" disabled={cancelling} onClick={confirmCancel}>
+              {cancelling ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          </>
+        }
+      >
+        <p className="sub" style={{ marginTop: 0 }}>
+          Every item not yet served will be called off and the stations told to stop.
+        </p>
+        <label>Reason (optional)</label>
+        <input
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="e.g. Customer left"
+        />
+      </Dialog>
     </StaffLayout>
   );
 }
