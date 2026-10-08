@@ -24,6 +24,9 @@ export function AdminMenuTab() {
   const [loadError, setLoadError] = useState('');
 
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryParent, setNewCategoryParent] = useState('');
+  const [filter, setFilter] = useState('');
+  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [newItem, setNewItem] = useState({
     category_id: '',
     name: '',
@@ -48,13 +51,54 @@ export function AdminMenuTab() {
 
   useEffect(load, [load]);
 
+  const mains = categories.filter((c) => !c.parent_id);
+  const subsOf = (id: string) => categories.filter((c) => c.parent_id === id);
+
+  /** "Drinks › Beer Bottles", so a select option says where an item lands. */
+  const categoryPath = (c: MenuCategory) => {
+    const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : undefined;
+    return parent ? `${parent.name} \u203a ${c.name}` : c.name;
+  };
+
+  /**
+   * Ordered main-then-children so a long select reads as the tree rather
+   * than an alphabetical jumble of 24 names.
+   */
+  const categoryOptions = mains.flatMap((main) => [main, ...subsOf(main.id)]);
+  const filterQuery = filter.trim().toLowerCase();
+
+  async function saveCategory() {
+    if (!editingCategory) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/admin/menu-categories/${editingCategory.id}`, {
+        method: 'PATCH',
+        auth: true,
+        // parent_id is always sent from this dialog, including null --
+        // that is how a sub-category is promoted back to a main one.
+        body: { name: editingCategory.name.trim(), parent_id: editingCategory.parent_id },
+      });
+      setEditingCategory(null);
+      load();
+      showToast('Category updated.', 'success');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function addCategory() {
     if (!newCategoryName.trim()) return;
     try {
       await apiFetch('/admin/menu-categories', {
         method: 'POST',
         auth: true,
-        body: { name: newCategoryName.trim(), sort_order: categories.length },
+        body: {
+          name: newCategoryName.trim(),
+          sort_order: categories.length,
+          ...(newCategoryParent ? { parent_id: newCategoryParent } : {}),
+        },
       });
       setNewCategoryName('');
       load();
@@ -123,6 +167,7 @@ export function AdminMenuTab() {
         method: 'PATCH',
         auth: true,
         body: {
+          category_id: editingItem.category_id,
           name: editingItem.name,
           description: editingItem.description ?? undefined,
           price: Number(editingItem.price),
@@ -161,11 +206,27 @@ export function AdminMenuTab() {
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Add category</h3>
         <div className="grid-2">
-          <input placeholder="e.g. Desserts" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
-          <button className="secondary" onClick={addCategory}>
-            Add category
-          </button>
+          <div>
+            <label>Name</label>
+            <input placeholder="e.g. Desserts" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+          </div>
+          <div>
+            <label>Inside</label>
+            {/* Only main categories are offered: menus are two levels
+                deep, so a sub-category cannot hold another. */}
+            <select value={newCategoryParent} onChange={(e) => setNewCategoryParent(e.target.value)}>
+              <option value="">Top level (a main category)</option>
+              {mains.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        <button className="secondary" onClick={addCategory}>
+          Add category
+        </button>
       </div>
 
       <div className="card">
@@ -173,9 +234,9 @@ export function AdminMenuTab() {
         <label>Category</label>
         <select value={newItem.category_id} onChange={(e) => setNewItem({ ...newItem, category_id: e.target.value })}>
           <option value="">Select a category…</option>
-          {categories.map((c) => (
+          {categoryOptions.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {categoryPath(c)}
             </option>
           ))}
         </select>
@@ -203,61 +264,172 @@ export function AdminMenuTab() {
         </button>
       </div>
 
-      {categories.map((category) => {
-        const categoryItems = items.filter((i) => i.category_id === category.id);
+      <div className="card">
+        <div className="top-bar" style={{ marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Menu</h3>
+          <span className="sub">
+            {items.length} item{items.length === 1 ? '' : 's'} in {categories.length} categories
+          </span>
+        </div>
+        {items.length > 20 && (
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter items…"
+            aria-label="Filter menu items"
+          />
+        )}
+      </div>
+
+      {/* Rendered as the tree the customer sees, so what an admin edits
+          looks like what a diner browses. A filter flattens it, because
+          when you are hunting one item the grouping is in the way. */}
+      {mains.map((main) => {
+        const groups = [main, ...subsOf(main.id)];
+        const visible = groups
+          .map((c) => ({
+            category: c,
+            items: items.filter(
+              (i) =>
+                i.category_id === c.id &&
+                (!filterQuery || i.name.toLowerCase().includes(filterQuery)),
+            ),
+          }))
+          // While filtering, a group with no match is noise.
+          .filter((g) => !filterQuery || g.items.length > 0);
+        if (filterQuery && visible.length === 0) return null;
+
         return (
-          <div key={category.id} className="table-block">
+          <div key={main.id} className="menu-admin-main">
             <div className="top-bar">
-              <h3>{category.name}</h3>
+              <h3>{main.name}</h3>
               <RowMenu
-                label={`Actions for ${category.name}`}
+                label={`Actions for ${main.name}`}
                 actions={[
+                  {
+                    label: 'Rename or move',
+                    icon: <PencilIcon size={16} />,
+                    onSelect: () => setEditingCategory(main),
+                  },
                   {
                     label: 'Delete category',
                     icon: <TrashIcon size={16} />,
                     danger: true,
-                    onSelect: () => setDeleteCategoryTarget(category),
+                    onSelect: () => setDeleteCategoryTarget(main),
                   },
                 ]}
               />
             </div>
-            {categoryItems.length === 0 && <div className="empty-state">No items yet.</div>}
-            {categoryItems.map((item) => (
-              <div key={item.id} className={`card item-row ${item.is_available ? '' : 'unavailable'}`}>
-                <div>
-                  <div className="item-name">{item.name}</div>
-                  {item.description && <div className="item-desc">{item.description}</div>}
-                  <div className="item-price">
-                    KSh {Number(item.price).toLocaleString()} &middot; {item.destination}
+
+            {visible.map(({ category, items: categoryItems }) => (
+              <div key={category.id} className={category.id === main.id ? '' : 'menu-admin-sub'}>
+                {category.id !== main.id && (
+                  <div className="top-bar">
+                    <div className="category-title">{category.name}</div>
+                    <RowMenu
+                      label={`Actions for ${category.name}`}
+                      actions={[
+                        {
+                          label: 'Rename or move',
+                          icon: <PencilIcon size={16} />,
+                          onSelect: () => setEditingCategory(category),
+                        },
+                        {
+                          label: 'Delete category',
+                          icon: <TrashIcon size={16} />,
+                          danger: true,
+                          onSelect: () => setDeleteCategoryTarget(category),
+                        },
+                      ]}
+                    />
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <button
-                    className={`availability-toggle ${item.is_available ? 'available' : ''}`}
-                    onClick={() => toggleAvailability(item)}
-                  >
-                    <span className="status-pill" style={{ background: 'transparent', padding: 0 }}>
-                      {item.is_available ? 'Available' : 'Unavailable'}
-                    </span>
-                  </button>
-                  <RowMenu
-                    label={`Actions for ${item.name}`}
-                    actions={[
-                      { label: 'Edit', icon: <PencilIcon size={16} />, onSelect: () => setEditingItem(item) },
-                      {
-                        label: 'Delete',
-                        icon: <TrashIcon size={16} />,
-                        danger: true,
-                        onSelect: () => setDeleteItemTarget(item),
-                      },
-                    ]}
-                  />
-                </div>
+                )}
+                {categoryItems.length === 0 && !filterQuery && (
+                  <div className="empty-state">No items yet.</div>
+                )}
+                {categoryItems.map((item) => (
+                  <div key={item.id} className={`card item-row ${item.is_available ? '' : 'unavailable'}`}>
+                    <div>
+                      <div className="item-name">{item.name}</div>
+                      {item.description && <div className="item-desc">{item.description}</div>}
+                      <div className="item-price">
+                        KSh {Number(item.price).toLocaleString()} &middot; {item.destination}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <button
+                        className={`availability-toggle ${item.is_available ? 'available' : ''}`}
+                        onClick={() => toggleAvailability(item)}
+                      >
+                        <span className="status-pill" style={{ background: 'transparent', padding: 0 }}>
+                          {item.is_available ? 'Available' : 'Unavailable'}
+                        </span>
+                      </button>
+                      <RowMenu
+                        label={`Actions for ${item.name}`}
+                        actions={[
+                          { label: 'Edit', icon: <PencilIcon size={16} />, onSelect: () => setEditingItem(item) },
+                          {
+                            label: 'Delete',
+                            icon: <TrashIcon size={16} />,
+                            danger: true,
+                            onSelect: () => setDeleteItemTarget(item),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
         );
       })}
+
+      <Dialog
+        open={!!editingCategory}
+        onClose={() => setEditingCategory(null)}
+        title={`Edit ${editingCategory?.name ?? ''}`}
+        footer={
+          <>
+            <button className="secondary" onClick={() => setEditingCategory(null)}>
+              Cancel
+            </button>
+            <button className="primary" disabled={saving} onClick={saveCategory}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        {editingCategory && (
+          <div>
+            <label>Name</label>
+            <input
+              value={editingCategory.name}
+              onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+            />
+            <label>Inside</label>
+            <select
+              value={editingCategory.parent_id ?? ''}
+              onChange={(e) =>
+                setEditingCategory({ ...editingCategory, parent_id: e.target.value || null })
+              }
+            >
+              <option value="">Top level (a main category)</option>
+              {/* A category cannot be its own parent, and the server
+                  refuses depth beyond two anyway. */}
+              {mains
+                .filter((c) => c.id !== editingCategory.id)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
+      </Dialog>
 
       <Dialog
         open={!!editingItem}
@@ -276,6 +448,19 @@ export function AdminMenuTab() {
       >
         {editingItem && (
           <div>
+            {/* Without this there was no way to move an item between
+                categories at all -- it had to be deleted and recreated. */}
+            <label>Category</label>
+            <select
+              value={editingItem.category_id}
+              onChange={(e) => setEditingItem({ ...editingItem, category_id: e.target.value })}
+            >
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {categoryPath(c)}
+                </option>
+              ))}
+            </select>
             <label>Name</label>
             <input value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} />
             <label>Description</label>

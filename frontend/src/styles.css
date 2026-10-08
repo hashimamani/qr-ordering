@@ -913,3 +913,16 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
 .menu-group-caret.open { transform: rotate(90deg); }
 /* Items belonging to an open group, indented so the grouping reads. */
 .menu-group .card.item-row { margin-left: 10px; }
+
+/* Admin menu editor, rendered as the same tree the customer browses so
+   what is edited looks like what a diner sees. */
+.menu-admin-main { margin-bottom: 26px; }
+.menu-admin-main > .top-bar h3 { margin: 0 0 8px; }
+/* The indent is the only thing distinguishing a sub-category from a main
+   one at a glance, so it carries a rule to make the nesting explicit. */
+.menu-admin-sub {
+  margin: 0 0 14px 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--ink-200);
+}
+.menu-admin-sub .category-title { margin: 0; }
