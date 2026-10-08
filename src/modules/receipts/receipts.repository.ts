@@ -171,7 +171,10 @@ export async function findReceiptDetail(orderId: string): Promise<ReceiptDetail 
             (oi.quantity * oi.unit_price)::numeric(12,2) AS line_total
      FROM order_item oi
      JOIN menu_item mi ON mi.id = oi.menu_item_id
-     WHERE oi.order_id = $1
+     -- A cancelled line is not sold, so it must not appear on the receipt
+     -- and must not reach the total. The receipt is the document the
+     -- customer is charged against.
+     WHERE oi.order_id = $1 AND oi.status <> 'cancelled'
      ORDER BY mi.name`,
     [orderId],
   );

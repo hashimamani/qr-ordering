@@ -31,7 +31,8 @@ export async function listOrderItemsByDestination(
      JOIN table_session ts ON ts.id = o.table_session_id
      JOIN "table" t ON t.id = ts.table_id
      JOIN menu_item mi ON mi.id = oi.menu_item_id
-     WHERE o.restaurant_id = $1 AND oi.destination = $2 AND oi.status != 'served'
+     WHERE o.restaurant_id = $1 AND oi.destination = $2
+       AND oi.status NOT IN ('served', 'cancelled')
      ORDER BY t.table_number, o.submitted_at, mi.name`,
     [restaurantId, destination],
   );
@@ -100,6 +101,7 @@ export async function listStationBoard(
      ) served ON oi.status = 'served'
      WHERE o.restaurant_id = $1
        AND oi.destination = $2
+       AND oi.status <> 'cancelled'
        AND (
          oi.status != 'served'
          OR o.submitted_at AT TIME ZONE 'Africa/Nairobi' >= $3::date

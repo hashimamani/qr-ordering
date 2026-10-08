@@ -5,6 +5,7 @@ import {
   insertOrderItemFacts,
   updateOrderFactWaiter,
   updateOrderFactPaymentStatus,
+  applyCancellationToFact,
 } from './reportingEvents.repository';
 import type { ReportingEvent } from './reportingEvents.types';
 
@@ -32,6 +33,10 @@ export async function processReportingEvent(event: ReportingEvent): Promise<void
       await updateOrderFactWaiter(event.orderId, event.restaurantId, event.waiterId, waiter?.name ?? null);
       return;
     }
+    case 'order_items_cancelled':
+      await applyCancellationToFact(event);
+      await broadcastEvent(`restaurant:${event.restaurantId}:admin`, { type: 'sales_changed' });
+      return;
     case 'order_paid':
       await updateOrderFactPaymentStatus(event.orderId, event.restaurantId);
       await broadcastEvent(`restaurant:${event.restaurantId}:admin`, { type: 'sales_changed' });

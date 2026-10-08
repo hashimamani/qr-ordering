@@ -29,6 +29,22 @@ export type ReportingEvent =
       items: ReportingOrderItemFact[];
     }
   | { type: 'order_waiter_assigned'; orderId: string; restaurantId: string; waiterId: string }
-  | { type: 'order_paid'; orderId: string; restaurantId: string };
+  | { type: 'order_paid'; orderId: string; restaurantId: string }
+  /**
+   * Corrects a fact already written. The fact is created when the order
+   * is placed, so without this a cancelled item would keep counting as
+   * revenue for the life of the report. Carries the cancelled value
+   * rather than a list of ids so the worker never has to re-query
+   * transactional data -- the same self-contained rule as every other
+   * event here.
+   */
+  | {
+      type: 'order_items_cancelled';
+      orderId: string;
+      restaurantId: string;
+      cancelledTotal: string;
+      cancelledItemCount: number;
+      orderItemIds: string[];
+    };
 
 export type OrderPlacedEvent = Extract<ReportingEvent, { type: 'order_placed' }>;

@@ -1,4 +1,4 @@
-import { pool } from '../../../db/pool';
+import { query, pool } from '../../../db/pool';
 import { toNairobiDateString } from '../../../lib/reportDate';
 import type { OrderPlacedEvent } from './reportingEvents.types';
 
@@ -82,4 +82,40 @@ export async function updateOrderFactPaymentStatus(orderId: string, restaurantId
      WHERE order_id = $1 AND restaurant_id = $2`,
     [orderId, restaurantId],
   );
+}
+
+/**
+ * Moves cancelled value out of the sales figures and into its own
+ * columns, so "what did we sell" and "what did we lose to cancellations"
+ * are both answerable from one row.
+ *
+ * GREATEST(0, ...) guards the floor: a duplicated event (SQS is
+ * at-least-once) must not drive a total negative. The matching item
+ * facts are deleted so per-item and per-category breakdowns stop
+ * counting them too -- a breakdown that disagrees with the headline
+ * figure is worse than either alone.
+ */
+export async function applyCancellationToFact(event: {
+  orderId: string;
+  restaurantId: string;
+  cancelledTotal: string;
+  cancelledItemCount: number;
+  orderItemIds: string[];
+}): Promise<void> {
+  await query(
+    `UPDATE report_order_fact
+        SET gross_total = GREATEST(0, gross_total - $3::numeric),
+            item_count = GREATEST(0, item_count - $4::int),
+            cancelled_total = cancelled_total + $3::numeric,
+            cancelled_item_count = cancelled_item_count + $4::int,
+            updated_at = now()
+      WHERE order_id = $1 AND restaurant_id = $2`,
+    [event.orderId, event.restaurantId, event.cancelledTotal, event.cancelledItemCount],
+  );
+
+  if (event.orderItemIds.length > 0) {
+    await query('DELETE FROM report_order_item_fact WHERE order_item_id = ANY($1::uuid[])', [
+      event.orderItemIds,
+    ]);
+  }
 }

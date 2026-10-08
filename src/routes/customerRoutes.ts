@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/asyncHandler';
 import { fixedWindowRateLimit } from '../lib/rateLimit';
-import { ValidationError } from '../lib/errors';
+import { NotFoundError, ValidationError } from '../lib/errors';
 import { resolveTableForOrdering } from '../modules/tables/tables.service';
 import { placeOrder } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
-import { findOrderByPublicToken } from '../modules/tracking/tracking.repository';
+import { findOrderByPublicToken, findRestaurantIdForOrder } from '../modules/tracking/tracking.repository';
 import {
   findTableContextByPublicToken,
   assignNextWaiterRoundRobin,
@@ -20,6 +20,8 @@ import {
 import { verifyReceiptChallengeSchema } from '../modules/receipts/receipts.validation';
 import { broadcastToTableWaiter } from '../realtime/waiterBroadcast';
 import { sendPushToStaff } from '../realtime/webPush';
+import { cancelOrderAsCustomer } from '../modules/orderItems/cancellation.service';
+import { cancelOrderSchema } from '../modules/orderItems/cancellation.validation';
 
 export const customerRoutes = Router();
 
@@ -42,6 +44,26 @@ customerRoutes.post(
     }
     const result = await placeOrder(slug, qrToken, parsed.data);
     res.status(201).json(result);
+  }),
+);
+
+customerRoutes.post(
+  '/track/:publicToken/cancel',
+  // The public token is the only credential a diner has, same as the
+  // tracking page itself. Rate-limited because it is unauthenticated and
+  // mutates: without it, a guessed token could be hammered.
+  fixedWindowRateLimit({ windowMs: 60_000, max: 10 }),
+  asyncHandler(async (req, res) => {
+    const restaurantId = await findRestaurantIdForOrder(req.params.publicToken);
+    if (!restaurantId) throw new NotFoundError('Order not found');
+    const parsed = cancelOrderSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new ValidationError('Invalid cancel payload', parsed.error.flatten());
+    const result = await cancelOrderAsCustomer(
+      restaurantId,
+      req.params.publicToken,
+      parsed.data.order_item_id,
+    );
+    res.json({ cancelled_items: result.items.length, order_fully_cancelled: result.orderFullyCancelled });
   }),
 );
 

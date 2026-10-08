@@ -14,6 +14,8 @@ import { listMenuForRestaurant } from '../modules/menu/menu.repository';
 import { placeStaffOrder, markOrderPaid, resendReceipt } from '../modules/orders/orders.service';
 import { createOrderSchema } from '../modules/orders/orders.validation';
 import { PREPARING_ROLES } from '../lib/domain';
+import { cancelOrderAsStaff } from '../modules/orderItems/cancellation.service';
+import { staffCancelOrderSchema } from '../modules/orderItems/cancellation.validation';
 
 export const staffRoutes = Router();
 
@@ -207,6 +209,27 @@ staffRoutes.patch(
 // the caller -- the receipt goes back to whoever placed the order. Needed
 // because there's no automatic channel fallback, so a failed send or an
 // expired link would otherwise be unrecoverable.
+// Admin and waiter only: a station role works its own queue but does not
+// decide that an order is off. Unlike the customer route there is no
+// "nothing started" restriction -- staff can see the food and are the
+// ones entitled to decide it is wasted.
+staffRoutes.post(
+  '/staff/orders/:publicToken/cancel',
+  requireStaffAuth,
+  requireRole('admin', 'waiter'),
+  asyncHandler(async (req, res) => {
+    const parsed = staffCancelOrderSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new ValidationError('Invalid cancel payload', parsed.error.flatten());
+    const result = await cancelOrderAsStaff(
+      req.staff!.restaurantId,
+      req.params.publicToken,
+      { id: req.staff!.sub, role: req.staff!.role },
+      { orderItemId: parsed.data.order_item_id, reason: parsed.data.reason },
+    );
+    res.json({ cancelled_items: result.items.length, order_fully_cancelled: result.orderFullyCancelled });
+  }),
+);
+
 staffRoutes.post(
   '/staff/orders/:publicToken/resend-receipt',
   requireStaffAuth,

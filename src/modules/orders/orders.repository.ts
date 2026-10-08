@@ -140,7 +140,11 @@ export async function markOrderAsPaid(restaurantId: string, publicToken: string)
 export async function isOrderFullyComplete(publicToken: string): Promise<boolean> {
   const result = await query<{ complete: boolean }>(
     `SELECT o.payment_status = 'paid'
-       AND NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = o.id AND status != 'served') AS complete
+       -- 'cancelled' is terminal like 'served': an item nobody will ever
+       -- serve must not hold the order (and its websocket room) open.
+       AND NOT EXISTS (
+         SELECT 1 FROM order_item WHERE order_id = o.id AND status NOT IN ('served', 'cancelled')
+       ) AS complete
      FROM "order" o
      WHERE o.public_token = $1`,
     [publicToken],

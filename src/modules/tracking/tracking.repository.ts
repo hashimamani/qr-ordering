@@ -5,7 +5,7 @@ export interface TrackedOrderItem {
   menu_item_name: string;
   quantity: number;
   notes: string | null;
-  status: 'received' | 'preparing' | 'ready' | 'served';
+  status: 'received' | 'preparing' | 'ready' | 'served' | 'cancelled';
 }
 
 export interface TrackedOrder {
@@ -59,4 +59,20 @@ export async function findOrderByPublicToken(publicToken: string): Promise<Track
   );
 
   return { ...order, items: itemsResult.rows };
+}
+
+/**
+ * Resolves which restaurant an order belongs to from its public token.
+ *
+ * Kept out of TrackedOrder on purpose: that payload goes to a diner and
+ * should carry nothing beyond their own order. The cancel route needs the
+ * restaurant to scope the write, so it looks it up rather than the
+ * customer-facing response growing a field for the server's benefit.
+ */
+export async function findRestaurantIdForOrder(publicToken: string): Promise<string | undefined> {
+  const result = await query<{ restaurant_id: string }>(
+    'SELECT restaurant_id FROM "order" WHERE public_token = $1',
+    [publicToken],
+  );
+  return result.rows[0]?.restaurant_id;
 }
