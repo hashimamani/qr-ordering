@@ -5,6 +5,7 @@ import type { ResolveTableResponse, PlaceOrderResponse, ContactChannel } from '.
 import { Dialog } from '../../components/Dialog';
 import { useToast } from '../../components/ToastProvider';
 import { useBrandColor } from '../../hooks/useBrandColor';
+import { MenuBrowser } from '../../components/MenuBrowser';
 
 export function OrderPage() {
   const [params] = useSearchParams();
@@ -49,14 +50,6 @@ export function OrderPage() {
       .catch((err: ApiError) => setLoadError(err.message));
   }, [slug, qrToken]);
 
-  const itemsByCategory = useMemo(() => {
-    const map = new Map<string, ResolveTableResponse['menu']['items']>();
-    data?.menu.items.forEach((item) => {
-      if (!map.has(item.category_id)) map.set(item.category_id, []);
-      map.get(item.category_id)!.push(item);
-    });
-    return map;
-  }, [data]);
 
   const itemById = useMemo(() => new Map(data?.menu.items.map((i) => [i.id, i]) ?? []), [data]);
 
@@ -102,38 +95,14 @@ export function OrderPage() {
       <main>
         {loadError && <div className="error-banner">{loadError}</div>}
 
-        {data?.menu.categories.map((category) => {
-          const items = itemsByCategory.get(category.id) ?? [];
-          if (items.length === 0) return null;
-          return (
-            <div key={category.id}>
-              <div className="category-title">{category.name}</div>
-              {items.map((item) => (
-                <div key={item.id} className={`card item-row ${item.is_available ? '' : 'unavailable'}`}>
-                  <div>
-                    <div className="item-name">{item.name}</div>
-                    {item.description && <div className="item-desc">{item.description}</div>}
-                    <div className="item-price">
-                      KSh {Number(item.price).toLocaleString()}
-                      {!item.is_available && ' (unavailable)'}
-                    </div>
-                  </div>
-                  {item.is_available && (
-                    <div className="qty-controls">
-                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) - 1)} aria-label={`Remove one ${item.name}`}>
-                        −
-                      </button>
-                      <span>{cart.get(item.id) ?? 0}</span>
-                      <button onClick={() => setQty(item.id, (cart.get(item.id) ?? 0) + 1)} aria-label={`Add one ${item.name}`}>
-                        +
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          );
-        })}
+        {data && (
+          <MenuBrowser
+            categories={data.menu.categories}
+            items={data.menu.items}
+            quantityFor={(id) => cart.get(id) ?? 0}
+            onQuantityChange={setQty}
+          />
+        )}
 
         {totalItems > 0 && <div className="cart-bar-spacer" />}
       </main>

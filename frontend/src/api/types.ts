@@ -20,6 +20,8 @@ export interface MenuCategory {
   id: string;
   name: string;
   sort_order: number;
+  /** null for a main category; set for a sub-category. */
+  parent_id: string | null;
 }
 
 export interface MenuItem {

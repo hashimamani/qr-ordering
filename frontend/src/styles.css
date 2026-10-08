@@ -838,3 +838,78 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
   text-align: center;
 }
 .receipt-attribution a { color: var(--brand-600); }
+
+/* Large menus: main-category tabs, collapsible sub-categories, search.
+   Only the customer ordering page uses these -- the staff screens show
+   orders, not the menu. */
+.menu-search {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+/* Sticky so the customer can switch section without scrolling back up
+   through 200 drinks. */
+.menu-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 0;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  /* The page background is a gradient, so the sticky row needs its own
+     opaque fill -- otherwise items scroll through it. */
+  background: var(--ink-50);
+  -webkit-overflow-scrolling: touch;
+}
+.menu-tabs::-webkit-scrollbar { display: none; }
+.menu-tabs button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-200);
+  background: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-600);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-tabs button.active {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: #fff;
+}
+
+.menu-group { margin-bottom: 8px; }
+.menu-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.menu-group-header:hover { background: var(--ink-50); }
+.menu-group-name { flex: 1; font-weight: 600; color: var(--ink-900); }
+.menu-group-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-500);
+  background: var(--ink-100);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.menu-group-caret {
+  color: var(--ink-400);
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.menu-group-caret.open { transform: rotate(90deg); }
+/* Items belonging to an open group, indented so the grouping reads. */
+.menu-group .card.item-row { margin-left: 10px; }
