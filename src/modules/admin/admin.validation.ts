@@ -37,11 +37,20 @@ export const updateRestaurantBrandingSchema = z.object({
 });
 
 export const createMenuCategorySchema = z.object({
+  parent_id: z.string().uuid().optional(),
   name: z.string().min(1).max(200),
   sort_order: z.number().int().default(0),
 });
 
-export const updateMenuCategorySchema = createMenuCategorySchema.partial();
+// Spelled out rather than createMenuCategorySchema.partial(), because
+// partial() makes parent_id merely optional and the admin needs to send
+// an explicit null to promote a sub-category back to a main one --
+// "absent" and "null" have to mean different things here.
+export const updateMenuCategorySchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  sort_order: z.number().int().optional(),
+  parent_id: z.string().uuid().nullable().optional(),
+});
 
 export const createMenuItemSchema = z.object({
   category_id: z.string().uuid(),

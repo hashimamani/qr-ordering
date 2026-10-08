@@ -24,8 +24,6 @@ import {
   renderTableQrLabels,
 } from '../modules/admin/admin.service';
 import {
-  insertMenuCategory,
-  updateMenuCategoryById,
   deleteMenuCategoryById,
   updateMenuItemById,
   deleteMenuItemById,
@@ -43,6 +41,7 @@ import { dateRangeSchema, breakdownQuerySchema, exportQuerySchema } from '../mod
 import { getTodaySummary, getSummary, getBreakdown, renderExport } from '../modules/reports/reports.service';
 import { getStationBoard, updateOrderItemStatus } from '../modules/orderItems/orderItems.service';
 import { listRecentActivity } from '../modules/orderItems/orderItems.repository';
+import { createMenuCategory, updateMenuCategory } from '../modules/admin/menuCategories.service';
 
 export const adminRoutes = Router();
 
@@ -71,9 +70,10 @@ adminRoutes.post(
   asyncHandler(async (req, res) => {
     const parsed = createMenuCategorySchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError('Invalid category payload', parsed.error.flatten());
-    const category = await insertMenuCategory(req.staff!.restaurantId, {
+    const category = await createMenuCategory(req.staff!.restaurantId, {
       name: parsed.data.name,
       sortOrder: parsed.data.sort_order,
+      parentId: parsed.data.parent_id,
     });
     res.status(201).json(category);
   }),
@@ -84,9 +84,14 @@ adminRoutes.patch(
   asyncHandler(async (req, res) => {
     const parsed = updateMenuCategorySchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError('Invalid category payload', parsed.error.flatten());
-    const category = await updateMenuCategoryById(req.staff!.restaurantId, req.params.id, {
+    const category = await updateMenuCategory(req.staff!.restaurantId, req.params.id, {
       name: parsed.data.name,
       sortOrder: parsed.data.sort_order,
+      // Only forwarded when the client actually sent the key, so a patch
+      // that renames a sub-category does not orphan it to the top level.
+      ...(Object.prototype.hasOwnProperty.call(parsed.data, 'parent_id')
+        ? { parentId: parsed.data.parent_id ?? null }
+        : {}),
     });
     res.json(category);
   }),

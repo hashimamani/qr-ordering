@@ -63,30 +63,57 @@ export interface MenuCategoryRow {
   restaurant_id: string;
   name: string;
   sort_order: number;
+  parent_id: string | null;
 }
 
 export async function insertMenuCategory(
   restaurantId: string,
-  input: { name: string; sortOrder: number },
+  input: { name: string; sortOrder: number; parentId?: string | null },
 ): Promise<MenuCategoryRow> {
   const result = await query<MenuCategoryRow>(
-    'INSERT INTO menu_category (restaurant_id, name, sort_order) VALUES ($1, $2, $3) RETURNING *',
-    [restaurantId, input.name, input.sortOrder],
+    'INSERT INTO menu_category (restaurant_id, name, sort_order, parent_id) VALUES ($1, $2, $3, $4) RETURNING *',
+    [restaurantId, input.name, input.sortOrder, input.parentId ?? null],
   );
   return result.rows[0];
+}
+
+/** For the depth and ownership checks; see admin.service. */
+export async function findMenuCategory(
+  restaurantId: string,
+  categoryId: string,
+): Promise<MenuCategoryRow | undefined> {
+  const result = await query<MenuCategoryRow>(
+    'SELECT * FROM menu_category WHERE id = $1 AND restaurant_id = $2',
+    [categoryId, restaurantId],
+  );
+  return result.rows[0];
+}
+
+export async function countChildCategories(categoryId: string): Promise<number> {
+  const result = await query<{ n: string }>(
+    'SELECT count(*) AS n FROM menu_category WHERE parent_id = $1',
+    [categoryId],
+  );
+  return Number(result.rows[0].n);
 }
 
 export async function updateMenuCategoryById(
   restaurantId: string,
   categoryId: string,
-  patch: { name?: string; sortOrder?: number },
+  patch: { name?: string; sortOrder?: number; parentId?: string | null },
 ): Promise<MenuCategoryRow> {
+  // parent_id is written whenever the key is present, including an
+  // explicit null that promotes a sub-category to a main one -- COALESCE
+  // would make "no parent" indistinguishable from "leave it alone".
+  const setsParent = Object.prototype.hasOwnProperty.call(patch, 'parentId');
   const result = await query<MenuCategoryRow>(
     `UPDATE menu_category
-     SET name = COALESCE($3, name), sort_order = COALESCE($4, sort_order)
+     SET name = COALESCE($3, name),
+         sort_order = COALESCE($4, sort_order),
+         parent_id = CASE WHEN $5::boolean THEN $6::uuid ELSE parent_id END
      WHERE id = $1 AND restaurant_id = $2
      RETURNING *`,
-    [categoryId, restaurantId, patch.name ?? null, patch.sortOrder ?? null],
+    [categoryId, restaurantId, patch.name ?? null, patch.sortOrder ?? null, setsParent, patch.parentId ?? null],
   );
   const row = result.rows[0];
   if (!row) throw new NotFoundError('Menu category not found');

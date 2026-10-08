@@ -5,6 +5,13 @@ export interface MenuCategory {
   id: string;
   name: string;
   sort_order: number;
+  /**
+   * null for a main category; set for a sub-category. Returned flat and
+   * assembled into a tree by the caller -- a nested payload would force
+   * every consumer to walk it even when all they want is "the category
+   * this item is in".
+   */
+  parent_id: string | null;
 }
 
 export interface MenuItem {
@@ -31,7 +38,7 @@ export async function listMenuForRestaurant(
 ): Promise<{ categories: MenuCategory[]; items: MenuItem[] }> {
   const [categories, items] = await Promise.all([
     query<MenuCategory>(
-      'SELECT id, name, sort_order FROM menu_category WHERE restaurant_id = $1 ORDER BY sort_order, name',
+      'SELECT id, name, sort_order, parent_id FROM menu_category WHERE restaurant_id = $1 ORDER BY sort_order, name',
       [restaurantId],
     ),
     query<MenuItem>(
@@ -58,7 +65,7 @@ export async function listMenuForRestaurantAdmin(
 ): Promise<{ categories: MenuCategory[]; items: MenuItemWithDestination[] }> {
   const [categories, items] = await Promise.all([
     query<MenuCategory>(
-      'SELECT id, name, sort_order FROM menu_category WHERE restaurant_id = $1 ORDER BY sort_order, name',
+      'SELECT id, name, sort_order, parent_id FROM menu_category WHERE restaurant_id = $1 ORDER BY sort_order, name',
       [restaurantId],
     ),
     query<MenuItemWithDestination>(
