@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../lib/asyncHandler';
+import { availableChannels } from '../modules/notifications/notifications.providers';
 import { ForbiddenError, ValidationError } from '../lib/errors';
 import { requireStaffAuth, requireRole } from '../middleware/staffAuth';
 import { loginStaff } from '../modules/staff/staff.service';
@@ -81,7 +82,14 @@ staffRoutes.get(
   requireRole('admin', 'waiter'),
   asyncHandler(async (req, res) => {
     const menu = await listMenuForRestaurant(req.staff!.restaurantId);
-    res.json(menu);
+    // Shipped alongside the menu for the same reason the customer's
+    // resolve endpoint carries it: this is everything needed to take an
+    // order at a table, and a staff order form that offers a channel the
+    // deployment cannot deliver on is the same silent failure the
+    // customer page already guards against. createOrderForTable rejects
+    // such a channel regardless; this is what stops the waiter being
+    // offered it in the first place.
+    res.json({ ...menu, available_channels: availableChannels() });
   }),
 );
 

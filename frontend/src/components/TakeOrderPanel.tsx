@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, ApiError } from '../api/client';
-import type { MenuCategory, MenuItem, PlaceOrderResponse } from '../api/types';
+import type { ContactChannel, MenuCategory, MenuItem, PlaceOrderResponse } from '../api/types';
 import { useToast } from './ToastProvider';
 
 interface StaffMenuResponse {
   categories: MenuCategory[];
   items: MenuItem[];
+  /** Only the channels this deployment can actually deliver on. */
+  available_channels: ContactChannel[];
 }
 
 /**
@@ -22,13 +24,20 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
   const [menu, setMenu] = useState<StaffMenuResponse | null>(null);
   const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Map<string, number>>(new Map());
-  const [channel, setChannel] = useState<'sms' | 'email'>('sms');
+  // Null until the menu loads, then defaulted to the first channel the
+  // server offers -- WhatsApp where available. Hardcoding 'sms' was how
+  // this form came to offer a channel list that had not included
+  // WhatsApp since the day it was added.
+  const [channel, setChannel] = useState<ContactChannel | null>(null);
   const [contact, setContact] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiFetch<StaffMenuResponse>('/staff/menu', { auth: true })
-      .then(setMenu)
+      .then((data) => {
+        setMenu(data);
+        setChannel((prev) => prev ?? data.available_channels[0] ?? null);
+      })
       .catch((err: ApiError) => setLoadError(err.message));
   }, []);
 
@@ -51,8 +60,15 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
   }
 
   const totalItems = [...cart.values()].reduce((a, b) => a + b, 0);
+  // WhatsApp and SMS are both addressed by the same E.164 number, so they
+  // share a field and a placeholder; only email differs.
+  const isPhoneChannel = channel === 'sms' || channel === 'whatsapp';
 
   async function submitOrder() {
+    if (!channel) {
+      showToast('No contact channel is available right now.');
+      return;
+    }
     if (!contact.trim()) {
       showToast('A contact (the customer’s, yours, or the restaurant’s) is required.');
       return;
@@ -111,16 +127,25 @@ export function TakeOrderPanel({ tableId, onOrderPlaced }: { tableId: string; on
       {totalItems > 0 && (
         <div style={{ marginTop: 12 }}>
           <label htmlFor={`channel-${tableId}`}>Contact via</label>
-          <select id={`channel-${tableId}`} value={channel} onChange={(e) => setChannel(e.target.value as 'sms' | 'email')}>
-            <option value="sms">SMS</option>
-            <option value="email">Email</option>
+          <select
+            id={`channel-${tableId}`}
+            value={channel ?? ''}
+            onChange={(e) => setChannel(e.target.value as ContactChannel)}
+          >
+            {(menu?.available_channels ?? []).map((c) => (
+              <option key={c} value={c}>
+                {c === 'whatsapp' ? 'WhatsApp' : c === 'sms' ? 'SMS' : 'Email'}
+              </option>
+            ))}
           </select>
-          <label htmlFor={`contact-${tableId}`}>Customer's phone/email, or your own</label>
+          <label htmlFor={`contact-${tableId}`}>
+            {isPhoneChannel ? "Customer's phone number, or your own" : "Customer's email, or your own"}
+          </label>
           <input
             id={`contact-${tableId}`}
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder={channel === 'sms' ? '0712345678 or +254712345678' : 'you@example.com'}
+            placeholder={isPhoneChannel ? '0712345678 or +254712345678' : 'you@example.com'}
           />
           <button className="primary" disabled={submitting} onClick={submitOrder}>
             {submitting ? 'Placing order…' : `Place order (${totalItems} item${totalItems > 1 ? 's' : ''})`}
