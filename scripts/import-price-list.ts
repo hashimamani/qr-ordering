@@ -16,6 +16,14 @@
  *   npx tsx scripts/import-price-list.ts --file "price list.xlsx" --slug chillax-zone
  *   npx tsx scripts/import-price-list.ts --file "price list.xlsx" --slug chillax-zone --commit
  *
+ * Production's database is inside the VPC with no bastion, so --commit
+ * only works against a database this machine can reach. For production,
+ * --emit <file> writes a payload for the seed Lambda, which runs the
+ * same importMenuForSlug from inside the VPC:
+ *
+ *   npx tsx scripts/import-price-list.ts --file "..." --slug chillax-zone --emit /tmp/menu.json
+ *   aws lambda invoke --function-name <SeedFunction> --payload file:///tmp/menu.json out.json
+ *
  * Notes on the format, learned the hard way from the sample:
  *  - the header row reads Product | Portion | Band | Price, but the price
  *    actually sits in column C under "Band"; column D is empty. Do not
@@ -27,7 +35,8 @@
 import 'dotenv/config';
 import fs from 'fs';
 import zlib from 'zlib';
-import { pool, withTransaction } from '../src/db/pool';
+import { pool } from '../src/db/pool';
+import { importMenuForSlug, type ImportCategory } from '../src/modules/menu/menuImport';
 import type { FulfilmentDestination } from '../src/lib/domain';
 
 /**
@@ -224,59 +233,36 @@ async function main(): Promise<void> {
     console.log();
   }
 
-  const restaurant = await pool.query<{ id: string; name: string }>(
-    'SELECT id, name FROM restaurant WHERE slug = $1',
-    [slug],
-  );
-  if (!restaurant.rows[0]) {
-    console.error(`no restaurant with slug "${slug}"`);
-    process.exit(1);
-  }
-  const { id: restaurantId, name: restaurantName } = restaurant.rows[0];
-  console.log(`target: ${restaurantName} (${slug})`);
+  const payload: { slug: string; categories: ImportCategory[] } = {
+    slug,
+    categories: [...byCategory].map(([name, items]) => ({
+      name,
+      destination: CATEGORY_DESTINATION[name],
+      // pos_code stays absent: this export carries no product codes.
+      items: items.map((i) => ({ name: i.name.trim(), price: Number(i.price) })),
+    })),
+  };
 
-  const existing = await pool.query<{ n: string }>(
-    'SELECT count(*) AS n FROM menu_item WHERE restaurant_id = $1',
-    [restaurantId],
-  );
-  if (Number(existing.rows[0].n) > 0) {
-    console.error(
-      `\nSTOPPING: ${restaurantName} already has ${existing.rows[0].n} menu items.\n` +
-        'This importer only populates an empty menu -- re-running it would duplicate everything.',
-    );
-    process.exit(1);
-  }
-
-  if (!commit) {
-    console.log('\nDRY RUN -- nothing written. Re-run with --commit to apply.');
+  const emit = arg('emit');
+  if (emit) {
+    fs.writeFileSync(emit, JSON.stringify({ importMenu: payload }, null, 1));
+    console.log(`\nwrote seed-Lambda payload to ${emit}`);
+    console.log('invoke it with:  aws lambda invoke --region eu-west-1 \\');
+    console.log(`    --function-name <SeedFunction> --payload file://${emit} out.json`);
     await pool.end();
     return;
   }
 
-  // One transaction: a partial menu is worse than no menu, since staff
-  // would have to work out which half arrived.
-  await withTransaction(async (client) => {
-    let sortOrder = 0;
-    for (const [category, items] of byCategory) {
-      const cat = await client.query<{ id: string }>(
-        'INSERT INTO menu_category (restaurant_id, name, sort_order) VALUES ($1, $2, $3) RETURNING id',
-        [restaurantId, category, sortOrder],
-      );
-      sortOrder += 1;
-      for (const item of items) {
-        await client.query(
-          `INSERT INTO menu_item (restaurant_id, category_id, name, price, destination, is_available)
-           VALUES ($1, $2, $3, $4, $5::order_item_destination, true)`,
-          [restaurantId, cat.rows[0].id, item.name.trim(), Number(item.price), CATEGORY_DESTINATION[category]],
-        );
-      }
-    }
-  });
+  if (!commit) {
+    console.log('\nDRY RUN -- nothing written. Re-run with --commit (local) or --emit <file> (production).');
+    await pool.end();
+    return;
+  }
 
-  console.log(`\nimported ${keep.length} items into ${byCategory.size} categories.`);
+  const result = await importMenuForSlug(slug, payload.categories);
+  console.log(`\nimported ${result.items} items into ${result.categories} categories for ${result.restaurant.name}.`);
   await pool.end();
 }
-
 main().catch(async (err) => {
   console.error(err);
   await pool.end().catch(() => {});

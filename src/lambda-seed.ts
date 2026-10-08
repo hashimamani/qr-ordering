@@ -1,8 +1,16 @@
 import { loadSecretsIntoEnv } from './lib/awsSecrets';
 import type { SeedResult } from './db/seed';
+import type { ImportCategory } from './modules/menu/menuImport';
 
 interface SeedEvent {
   createPlatformAdmin?: { name: string; email: string; password: string };
+  /**
+   * A menu parsed elsewhere and handed over ready to write. The parsing
+   * stays on whoever has the client's spreadsheet; this exists because
+   * RDS is in the VPC with no bastion, so a Lambda is the only thing
+   * that can reach the production database at all.
+   */
+  importMenu?: { slug: string; categories: ImportCategory[] };
 }
 
 /**
@@ -24,6 +32,13 @@ export async function handler(event: SeedEvent = {}): Promise<{ statusCode: numb
     const { name, email, password } = event.createPlatformAdmin;
     const admin = await createPlatformAdmin(name, email, password);
     return { statusCode: 200, body: JSON.stringify({ created: admin }, null, 2) };
+  }
+
+  if (event.importMenu) {
+    const { importMenuForSlug } = await import('./modules/menu/menuImport');
+    const { slug, categories } = event.importMenu;
+    const result = await importMenuForSlug(slug, categories);
+    return { statusCode: 200, body: JSON.stringify({ imported: result }, null, 2) };
   }
 
   const { seedDatabase } = (await import('./db/seed')) as { seedDatabase: () => Promise<SeedResult> };
