@@ -65,6 +65,21 @@ webhookRoutes.post(
 
     const updates = parseStatusUpdates(req.body);
     let matched = 0;
+    // Logged per status so delivery latency can be read off the logs:
+    // which status, Meta's own timestamp for it, and how far behind the
+    // callback arrived. Previously only the count was recorded, so a
+    // "messages are slow" report had nothing to measure against.
+    for (const u of updates) {
+      logger.info(
+        {
+          providerMessageId: u.providerMessageId,
+          status: u.status,
+          metaTimestamp: u.timestamp,
+          callbackLagSeconds: u.timestamp ? Math.round(Date.now() / 1000 - u.timestamp) : undefined,
+        },
+        'whatsapp delivery status',
+      );
+    }
     for (const update of updates) {
       const applied = await applyDeliveryStatus({
         providerMessageId: update.providerMessageId,

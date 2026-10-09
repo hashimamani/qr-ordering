@@ -183,3 +183,24 @@ describe('status progression', () => {
     }
   });
 });
+
+describe('Meta timestamps', () => {
+  // Without these, "messages are slow" can only be measured from when the
+  // callback reached us, which hides whether the delay is Meta accepting
+  // the message or the handset being unreachable.
+  it('keeps the timestamp Meta reports for each status', () => {
+    const [u] = parseStatusUpdates(
+      statusPayload([{ id: 'wamid.A', status: 'delivered', timestamp: '1791500000' }]),
+    );
+    expect(u.timestamp).toBe(1791500000);
+  });
+
+  it('omits an absent or nonsensical timestamp rather than inventing one', () => {
+    for (const ts of [undefined, '', 'soon', '0', '-5']) {
+      const [u] = parseStatusUpdates(
+        statusPayload([{ id: 'wamid.A', status: 'sent', ...(ts === undefined ? {} : { timestamp: ts }) }]),
+      );
+      expect(u.timestamp).toBeUndefined();
+    }
+  });
+});

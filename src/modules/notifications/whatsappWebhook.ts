@@ -53,6 +53,17 @@ export interface DeliveryStatusUpdate {
   status: NotificationStatus;
   /** Meta's own error text, when it gave one -- worth keeping verbatim. */
   detail?: string;
+  /**
+   * Meta's own epoch-seconds timestamp for the status.
+   *
+   * Without it, "how long did delivery take" can only be inferred from
+   * when the callback reached us, which conflates three separate things:
+   * Meta accepting the message, the handset actually receiving it, and
+   * the callback travelling back to us. The gap between a 'sent' and a
+   * 'delivered' timestamp is the recipient's device being reachable --
+   * not something any amount of tuning on our side can change.
+   */
+  timestamp?: number;
 }
 
 /**
@@ -143,7 +154,13 @@ export function parseStatusUpdates(payload: unknown): DeliveryStatusUpdate[] {
           const e = s.errors[0] as { code?: unknown; title?: unknown; message?: unknown };
           detail = [e.code, e.message ?? e.title].filter(Boolean).join(': ') || undefined;
         }
-        updates.push({ providerMessageId: s.id, status: mapped, detail });
+        const ts = Number((raw as { timestamp?: unknown }).timestamp);
+        updates.push({
+          providerMessageId: s.id,
+          status: mapped,
+          detail,
+          timestamp: Number.isFinite(ts) && ts > 0 ? ts : undefined,
+        });
       }
     }
   }
