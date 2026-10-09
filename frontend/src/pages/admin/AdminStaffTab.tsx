@@ -8,6 +8,7 @@ import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
 import { PasswordInput } from '../../components/PasswordInput';
+import { ReadOnlyGate } from '../../components/ReadOnlyGate';
 
 interface EditState {
   name: string;
@@ -113,35 +114,37 @@ export function AdminStaffTab() {
     <div>
       {loadError && <div className="error-banner">{loadError}</div>}
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add staff login</h3>
-        <label>Name</label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <div className="grid-2">
-          <div>
-            <label>Role</label>
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as StaffRole })}>
-              <option value="waiter">Waiter</option>
-              <option value="kitchen">Kitchen</option>
-              <option value="bar">Bar</option>
-              <option value="admin">Admin</option>
-            </select>
+      <ReadOnlyGate>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Add staff login</h3>
+          <label>Name</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <div className="grid-2">
+            <div>
+              <label>Role</label>
+              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as StaffRole })}>
+                <option value="waiter">Waiter</option>
+                <option value="kitchen">Kitchen</option>
+                <option value="bar">Bar</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label>Phone or email</label>
+              <input value={form.phone_or_email} onChange={(e) => setForm({ ...form, phone_or_email: e.target.value })} />
+            </div>
           </div>
-          <div>
-            <label>Phone or email</label>
-            <input value={form.phone_or_email} onChange={(e) => setForm({ ...form, phone_or_email: e.target.value })} />
-          </div>
+          <label>Password (8+ characters)</label>
+          <PasswordInput
+            autoCompleteMode="new"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <button className="primary" disabled={creating} onClick={addStaff}>
+            {creating ? 'Adding…' : 'Add staff login'}
+          </button>
         </div>
-        <label>Password (8+ characters)</label>
-        <PasswordInput
-          autoCompleteMode="new"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-        />
-        <button className="primary" disabled={creating} onClick={addStaff}>
-          {creating ? 'Adding…' : 'Add staff login'}
-        </button>
-      </div>
+      </ReadOnlyGate>
 
       <div className="table-scroll">
         <table className="data-table">

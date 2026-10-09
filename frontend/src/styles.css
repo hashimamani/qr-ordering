@@ -936,3 +936,40 @@ button.danger-solid:disabled { background: var(--ink-300); cursor: not-allowed; 
    can see what was called off, just visibly inactive. */
 .card.item-row.unavailable .status-pill { opacity: 0.7; }
 .status-cancelled { background: var(--red-50); color: var(--red-700); }
+
+/* Platform admin's read-only view. Deliberately loud and undismissible:
+   someone looking at another business's data should never be in doubt
+   about whose data it is, or why the buttons they expect are missing. */
+ /* The shell is a row (sidebar | content), so the banner needs a column
+   wrapper above it -- dropped straight into the shell it became a
+   502px-wide vertical strip beside the sidebar. */
+.admin-shell-wrap { display: flex; flex-direction: column; min-height: 100vh; }
+.admin-shell-wrap > .admin-shell { flex: 1; min-height: 0; }
+
+.readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--amber-50);
+  color: var(--amber-700);
+  border-bottom: 1px solid var(--amber-700);
+  font-size: 13px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.readonly-banner span { flex: 1; }
+.readonly-banner strong { font-weight: 700; }
+.readonly-banner-exit {
+  border: 1px solid var(--amber-700);
+  background: transparent;
+  color: var(--amber-700);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.readonly-banner-exit:hover { background: rgba(0, 0, 0, 0.04); }

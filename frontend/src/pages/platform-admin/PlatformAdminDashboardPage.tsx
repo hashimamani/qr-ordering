@@ -32,6 +32,7 @@ export function PlatformAdminDashboardPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [managingRestaurantId, setManagingRestaurantId] = useState<string | null>(null);
   const [modeChangingId, setModeChangingId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [resetTarget, setResetTarget] = useState<ResetPreview | null>(null);
   const [confirmSlug, setConfirmSlug] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -105,6 +106,29 @@ export function PlatformAdminDashboardPage() {
       showToast(err instanceof ApiError ? err.message : 'Could not change mode.', 'error');
     } finally {
       setModeChangingId(null);
+    }
+  }
+
+  /**
+   * Swaps this tab into the restaurant's admin UI using a read-only
+   * token. sessionStorage is per-tab, so the platform-admin session in
+   * other tabs is untouched; the staff session keys are the same ones a
+   * real login uses, which is what lets the whole admin UI work unchanged.
+   */
+  async function viewAsAdmin(r: RestaurantSummary) {
+    setViewingId(r.id);
+    try {
+      const view = await apiFetch<{ token: string; restaurant: { name: string } }>(
+        `/platform-admin/restaurants/${r.id}/view-token`,
+        { method: 'POST', authToken: session!.token },
+      );
+      sessionStorage.setItem('staffToken', view.token);
+      sessionStorage.setItem('staffName', 'Platform admin');
+      sessionStorage.setItem('restaurantName', view.restaurant.name);
+      window.location.assign('/admin/overview');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not open that restaurant.', 'error');
+      setViewingId(null);
     }
   }
 
@@ -300,6 +324,18 @@ export function PlatformAdminDashboardPage() {
                   {/* Only offered for test tenants. The server refuses a live
                       one regardless; hiding it here keeps the destructive
                       action out of reach rather than merely unsuccessful. */}
+                  {/* Test-mode only, matching the server. Viewing a live
+                      tenant's trading data is a bigger decision than
+                      inspecting a demo and should not be one click away. */}
+                  {r.mode === 'test' && (
+                    <button
+                      className="secondary"
+                      disabled={viewingId === r.id}
+                      onClick={() => viewAsAdmin(r)}
+                    >
+                      {viewingId === r.id ? 'Opening…' : 'View as admin'}
+                    </button>
+                  )}{' '}
                   {r.mode === 'test' && (
                     <button className="danger" onClick={() => openReset(r)}>
                       {resetTarget?.restaurant.id === r.id ? 'Close' : 'Reset data'}

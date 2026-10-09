@@ -11,6 +11,7 @@ import {
   MenuIcon,
   SlidersIcon,
   SparklesIcon,
+  EyeIcon,
   XIcon,
 } from '../../components/icons';
 
@@ -42,7 +43,28 @@ export function AdminLayout() {
   if (!session) return null;
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell-wrap">
+      {/* Always visible, never dismissible. Someone looking at a tenant's
+          data needs to know whose data it is and that they are a guest in
+          it -- and why the buttons they expect are missing. */}
+      {session.readOnly && (
+        <div className="readonly-banner" role="status">
+          <EyeIcon size={15} />
+          <span>
+            Read-only view of <strong>{session.restaurantName}</strong> — you cannot make changes.
+          </span>
+          <button
+            className="readonly-banner-exit"
+            onClick={() => {
+              logout();
+              navigate('/platform-admin');
+            }}
+          >
+            Leave
+          </button>
+        </div>
+      )}
+      <div className="admin-shell">
       <button
         className="admin-drawer-toggle"
         onClick={() => setDrawerOpen(true)}
@@ -104,6 +126,7 @@ export function AdminLayout() {
       <main className="admin-content">
         <Outlet />
       </main>
+      </div>
     </div>
   );
 }

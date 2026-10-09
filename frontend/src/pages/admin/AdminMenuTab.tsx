@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { PencilIcon, TrashIcon } from '../../components/icons';
+import { ReadOnlyGate } from '../../components/ReadOnlyGate';
 
 // Built from DESTINATION_LABELS so a new station appears in both the add
 // and edit forms without either being updated by hand -- the two selects
@@ -203,66 +204,70 @@ export function AdminMenuTab() {
     <div>
       {loadError && <div className="error-banner">{loadError}</div>}
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add category</h3>
-        <div className="grid-2">
-          <div>
-            <label>Name</label>
-            <input placeholder="e.g. Desserts" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+      <ReadOnlyGate>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Add category</h3>
+          <div className="grid-2">
+            <div>
+              <label>Name</label>
+              <input placeholder="e.g. Desserts" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+            </div>
+            <div>
+              <label>Inside</label>
+              {/* Only main categories are offered: menus are two levels
+                  deep, so a sub-category cannot hold another. */}
+              <select value={newCategoryParent} onChange={(e) => setNewCategoryParent(e.target.value)}>
+                <option value="">Top level (a main category)</option>
+                {mains.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label>Inside</label>
-            {/* Only main categories are offered: menus are two levels
-                deep, so a sub-category cannot hold another. */}
-            <select value={newCategoryParent} onChange={(e) => setNewCategoryParent(e.target.value)}>
-              <option value="">Top level (a main category)</option>
-              {mains.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <button className="secondary" onClick={addCategory}>
+            Add category
+          </button>
         </div>
-        <button className="secondary" onClick={addCategory}>
-          Add category
-        </button>
-      </div>
+      </ReadOnlyGate>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add menu item</h3>
-        <label>Category</label>
-        <select value={newItem.category_id} onChange={(e) => setNewItem({ ...newItem, category_id: e.target.value })}>
-          <option value="">Select a category…</option>
-          {categoryOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {categoryPath(c)}
-            </option>
-          ))}
-        </select>
-        <label>Name</label>
-        <input value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} />
-        <label>Description (optional)</label>
-        <input value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} />
-        <div className="grid-2">
-          <div>
-            <label>Price (KSh)</label>
-            <input type="number" min="0" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} />
+      <ReadOnlyGate>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Add menu item</h3>
+          <label>Category</label>
+          <select value={newItem.category_id} onChange={(e) => setNewItem({ ...newItem, category_id: e.target.value })}>
+            <option value="">Select a category…</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {categoryPath(c)}
+              </option>
+            ))}
+          </select>
+          <label>Name</label>
+          <input value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} />
+          <label>Description (optional)</label>
+          <input value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} />
+          <div className="grid-2">
+            <div>
+              <label>Price (KSh)</label>
+              <input type="number" min="0" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} />
+            </div>
+            <div>
+              <label>Destination</label>
+              <select
+                value={newItem.destination}
+                onChange={(e) => setNewItem({ ...newItem, destination: e.target.value as Destination })}
+              >
+                {DESTINATION_OPTIONS}
+              </select>
+            </div>
           </div>
-          <div>
-            <label>Destination</label>
-            <select
-              value={newItem.destination}
-              onChange={(e) => setNewItem({ ...newItem, destination: e.target.value as Destination })}
-            >
-              {DESTINATION_OPTIONS}
-            </select>
-          </div>
+          <button className="primary" onClick={addItem}>
+            Add item
+          </button>
         </div>
-        <button className="primary" onClick={addItem}>
-          Add item
-        </button>
-      </div>
+      </ReadOnlyGate>
 
       <div className="card">
         <div className="top-bar" style={{ marginBottom: 10 }}>
@@ -304,7 +309,7 @@ export function AdminMenuTab() {
           <div key={main.id} className="menu-admin-main">
             <div className="top-bar">
               <h3>{main.name}</h3>
-              <RowMenu
+              <ReadOnlyGate><RowMenu
                 label={`Actions for ${main.name}`}
                 actions={[
                   {
@@ -319,7 +324,7 @@ export function AdminMenuTab() {
                     onSelect: () => setDeleteCategoryTarget(main),
                   },
                 ]}
-              />
+              /></ReadOnlyGate>
             </div>
 
             {visible.map(({ category, items: categoryItems }) => (
@@ -327,7 +332,7 @@ export function AdminMenuTab() {
                 {category.id !== main.id && (
                   <div className="top-bar">
                     <div className="category-title">{category.name}</div>
-                    <RowMenu
+                    <ReadOnlyGate><RowMenu
                       label={`Actions for ${category.name}`}
                       actions={[
                         {
@@ -342,7 +347,7 @@ export function AdminMenuTab() {
                           onSelect: () => setDeleteCategoryTarget(category),
                         },
                       ]}
-                    />
+                    /></ReadOnlyGate>
                   </div>
                 )}
                 {categoryItems.length === 0 && !filterQuery && (
@@ -358,7 +363,7 @@ export function AdminMenuTab() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <button
+                      <ReadOnlyGate><button
                         className={`availability-toggle ${item.is_available ? 'available' : ''}`}
                         onClick={() => toggleAvailability(item)}
                       >
@@ -377,7 +382,7 @@ export function AdminMenuTab() {
                             onSelect: () => setDeleteItemTarget(item),
                           },
                         ]}
-                      />
+                      /></ReadOnlyGate>
                     </div>
                   </div>
                 ))}

@@ -5,6 +5,18 @@ export interface StaffTokenPayload {
   sub: string; // staff_user id
   restaurantId: string;
   role: StaffRole;
+  /**
+   * Set only on a platform admin's look-but-don't-touch token. Enforced
+   * in requireStaffAuth by rejecting every method except GET/HEAD, so a
+   * route added later is covered without anyone remembering to.
+   */
+  readOnly?: true;
+  /**
+   * Who is really behind a read-only token. The platform_admin id, kept
+   * so the logs can say which person looked at a tenant's data rather
+   * than just that "someone" did.
+   */
+  viewerPlatformAdminId?: string;
 }
 
 function requireSecret(envVar: string): string {
@@ -17,6 +29,18 @@ function requireSecret(envVar: string): string {
 
 export function signStaffToken(payload: StaffTokenPayload): string {
   return jwt.sign(payload, requireSecret('JWT_SECRET'), { expiresIn: '12h' });
+}
+
+/**
+ * A platform admin's read-only view of one restaurant.
+ *
+ * Deliberately short-lived. The restaurant must be in test mode to get
+ * one, and mode is checked when the token is minted rather than on every
+ * request; a 30-minute life bounds how long a token outlives the
+ * condition that justified it.
+ */
+export function signReadOnlyStaffToken(payload: StaffTokenPayload): string {
+  return jwt.sign(payload, requireSecret('JWT_SECRET'), { expiresIn: '30m' });
 }
 
 export function verifyStaffToken(token: string): StaffTokenPayload {

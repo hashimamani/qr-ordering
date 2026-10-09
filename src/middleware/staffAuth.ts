@@ -28,6 +28,16 @@ export function requireStaffAuth(req: Request, _res: Response, next: NextFunctio
   } catch {
     throw new UnauthorizedError('Invalid or expired token');
   }
+
+  // The single enforcement point for a platform admin's read-only view.
+  // Checked here rather than per route so a route added tomorrow is
+  // covered by default -- a deny-list of mutating endpoints would be one
+  // forgotten entry away from letting an outsider write to a tenant's
+  // data. Every read in this app is a GET, so no allowlist is needed.
+  if (req.staff.readOnly && req.method !== 'GET' && req.method !== 'HEAD') {
+    throw new ForbiddenError('This is a read-only view. You cannot make changes to this restaurant.');
+  }
+
   next();
 }
 

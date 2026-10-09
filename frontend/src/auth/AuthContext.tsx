@@ -5,6 +5,12 @@ import { onUnauthorized } from '../api/client';
 
 export interface StaffSession {
   token: string;
+  /**
+   * A platform admin looking at a restaurant they do not work for. The
+   * server refuses every write from such a token; the UI hides the
+   * controls so nobody discovers that by being refused.
+   */
+  readOnly: boolean;
   restaurantId: string;
   staffId: string;
   role: StaffRole;
@@ -53,6 +59,7 @@ function decodeSession(token: string, identity: StoredIdentity): StaffSession | 
       restaurantId: payload.restaurantId,
       staffId: payload.sub,
       role: payload.role,
+      readOnly: payload.readOnly === true,
       ...identity,
     };
   } catch {

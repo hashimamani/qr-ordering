@@ -18,6 +18,7 @@ import { restaurantSignupSchema } from '../modules/admin/admin.validation';
 import { signUpRestaurant } from '../modules/admin/admin.service';
 import { listAllRestaurants } from '../modules/admin/admin.repository';
 import { listAdminsForRestaurant } from '../modules/staff/staff.repository';
+import { mintRestaurantViewToken } from '../modules/platformAdmin/restaurantView.service';
 
 export const platformAdminRoutes = Router();
 
@@ -105,5 +106,16 @@ platformAdminRoutes.post(
       id: req.platformAdmin!.sub,
     });
     res.json({ cleared: counts });
+  }),
+);
+
+// Read-only, test-mode-only, 30 minutes. The token it returns is an
+// ordinary staff token with readOnly set, so the whole admin UI works
+// against it unchanged while requireStaffAuth refuses every write.
+platformAdminRoutes.post(
+  '/platform-admin/restaurants/:id/view-token',
+  asyncHandler(async (req, res) => {
+    const view = await mintRestaurantViewToken(req.params.id, req.platformAdmin!.sub);
+    res.json(view);
   }),
 );

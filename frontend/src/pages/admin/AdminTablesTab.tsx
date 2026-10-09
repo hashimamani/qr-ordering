@@ -8,6 +8,7 @@ import { RowMenu } from '../../components/RowMenu';
 import { useToast } from '../../components/ToastProvider';
 import { DownloadIcon, QrCodeIcon, TrashIcon, UsersIcon } from '../../components/icons';
 import { downloadFile } from '../../api/download';
+import { ReadOnlyGate } from '../../components/ReadOnlyGate';
 
 // The frontend's own origin is the customer ordering base -- this static
 // build is what the QR code needs to point at, not the API's domain.
@@ -172,15 +173,17 @@ export function AdminTablesTab() {
     <div>
       {loadError && <div className="error-banner">{loadError}</div>}
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add table</h3>
-        <div className="grid-2">
-          <input placeholder="Table number, e.g. 7" value={newTableNumber} onChange={(e) => setNewTableNumber(e.target.value)} />
-          <button className="primary" disabled={creating} onClick={createTable}>
-            {creating ? 'Creating…' : 'Create table + QR'}
-          </button>
+      <ReadOnlyGate>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Add table</h3>
+          <div className="grid-2">
+            <input placeholder="Table number, e.g. 7" value={newTableNumber} onChange={(e) => setNewTableNumber(e.target.value)} />
+            <button className="primary" disabled={creating} onClick={createTable}>
+              {creating ? 'Creating…' : 'Create table + QR'}
+            </button>
+          </div>
         </div>
-      </div>
+      </ReadOnlyGate>
 
       {justCreated && (
         <div className="card">
